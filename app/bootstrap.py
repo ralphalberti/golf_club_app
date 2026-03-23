@@ -1,0 +1,67 @@
+from pathlib import Path
+import sys
+
+from PyQt5.QtWidgets import QApplication
+
+from app.config import APP_NAME, DATA_DIR, EXPORT_DIR
+from db.connection import Database
+from db.schema import create_schema
+from db.seed import seed_defaults
+from repositories.user_repository import UserRepository
+from services.auth_service import AuthService
+from services.member_service import MemberService
+from services.course_service import CourseService
+from services.outing_service import OutingService
+from services.reporting_service import ReportingService
+from services.scheduling_service import SchedulingService
+from services.export_service import ExportService
+from services.pdf_service import PdfService
+from services.email_service import EmailService
+from services.distribution_service import DistributionService
+from ui.login_dialog import LoginDialog
+from ui.main_window import MainWindow
+
+def bootstrap_and_run() -> None:
+    DATA_DIR.mkdir(exist_ok=True)
+    EXPORT_DIR.mkdir(exist_ok=True)
+
+    db = Database()
+    create_schema(db)
+    seed_defaults(db)
+
+    user_repo = UserRepository(db)
+    auth_service = AuthService(user_repo)
+    member_service = MemberService(db)
+    course_service = CourseService(db)
+    outing_service = OutingService(db)
+    reporting_service = ReportingService(db)
+    scheduling_service = SchedulingService(db)
+    pdf_service = PdfService()
+    export_service = ExportService()
+    email_service = EmailService(db)
+    distribution_service = DistributionService(
+        db=db,
+        pdf_service=pdf_service,
+        export_service=export_service,
+        email_service=email_service,
+    )
+
+    app = QApplication(sys.argv)
+    app.setApplicationName(APP_NAME)
+
+    login = LoginDialog(auth_service)
+    if login.exec_() != LoginDialog.Accepted:
+        return
+
+    user = login.authenticated_user
+    window = MainWindow(
+        current_user=user,
+        member_service=member_service,
+        course_service=course_service,
+        outing_service=outing_service,
+        reporting_service=reporting_service,
+        scheduling_service=scheduling_service,
+        distribution_service=distribution_service,
+    )
+    window.show()
+    sys.exit(app.exec_())
