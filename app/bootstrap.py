@@ -8,6 +8,8 @@ from db.connection import Database
 from db.schema import create_schema
 from db.seed import seed_defaults
 from repositories.user_repository import UserRepository
+from repositories.member_repository import MemberRepository
+from repositories.reporting_repository import ReportingRepository
 from services.auth_service import AuthService
 from services.member_service import MemberService
 from services.course_service import CourseService
@@ -21,6 +23,7 @@ from services.distribution_service import DistributionService
 from ui.login_dialog import LoginDialog
 from ui.main_window import MainWindow
 
+
 def bootstrap_and_run() -> None:
     DATA_DIR.mkdir(exist_ok=True)
     EXPORT_DIR.mkdir(exist_ok=True)
@@ -31,7 +34,11 @@ def bootstrap_and_run() -> None:
 
     user_repo = UserRepository(db)
     auth_service = AuthService(user_repo)
-    member_service = MemberService(db)
+
+    member_repo = MemberRepository(db)
+    reporting_repo = ReportingRepository(db)
+    member_service = MemberService(member_repo, reporting_repo)
+
     course_service = CourseService(db)
     outing_service = OutingService(db)
     reporting_service = ReportingService(db)

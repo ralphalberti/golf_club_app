@@ -19,8 +19,8 @@ CREATE TABLE IF NOT EXISTS members (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     first_name TEXT NOT NULL,
     last_name TEXT NOT NULL,
-    email TEXT,
-    phone TEXT,
+    email TEXT NOT NULL,
+    phone TEXT NOT NULL,
     handicap REAL DEFAULT 0,
     joined_date TEXT NOT NULL,
     active INTEGER NOT NULL DEFAULT 1,
@@ -154,6 +154,7 @@ CREATE TABLE IF NOT EXISTS audit_log (
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
 """
+
 
 def create_schema(db: Database) -> None:
     with db.get_conn() as conn:

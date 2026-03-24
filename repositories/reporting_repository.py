@@ -1,9 +1,10 @@
 from repositories.base_repository import BaseRepository
 
+
 class ReportingRepository(BaseRepository):
     def member_summary(self, member_id: int):
         with self.db.get_conn() as conn:
-            return conn.execute(
+            row = conn.execute(
                 """
                 SELECT
                     COUNT(*) AS rounds_played,
@@ -14,3 +15,13 @@ class ReportingRepository(BaseRepository):
                 """,
                 (member_id,),
             ).fetchone()
+
+            return (
+                dict(row)
+                if row
+                else {
+                    "rounds_played": 0,
+                    "dates_played": 0,
+                    "courses_played": 0,
+                }
+            )
