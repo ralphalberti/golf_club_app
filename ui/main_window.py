@@ -16,6 +16,7 @@ from app.config import APP_NAME
 from app.constants import APP_VERSION
 from ui.shared.forms import MemberFormDialog, CourseFormDialog, OutingFormDialog
 from ui.outing_assignment_dialog import OutingAssignmentDialog
+from ui.schedule_editor_dialog import ScheduleEditorDialog
 
 
 class MainWindow(QMainWindow):
@@ -130,19 +131,28 @@ class MainWindow(QMainWindow):
 
         create_btn = QPushButton("Create Outing")
         edit_btn = QPushButton("Edit Outing")
+        delete_btn = QPushButton("Delete Outing")
         gen_btn = QPushButton("Generate Schedule")
+        edit_schedule_btn = QPushButton("Edit Schedule")
+        remove_player_btn = QPushButton("Remove Selected Player")
         refresh_btn = QPushButton("Refresh Assignments")
         export_btn = QPushButton("Export PDF / CSV")
 
         create_btn.clicked.connect(self.add_outing)
         edit_btn.clicked.connect(self.edit_outing)
+        delete_btn.clicked.connect(self.delete_outing)
         gen_btn.clicked.connect(self.generate_schedule)
+        edit_schedule_btn.clicked.connect(self.edit_schedule)
+        remove_player_btn.clicked.connect(self.remove_selected_assignment)
         refresh_btn.clicked.connect(self.refresh_assignments)
         export_btn.clicked.connect(self.export_outputs)
 
         buttons.addWidget(create_btn)
         buttons.addWidget(edit_btn)
+        buttons.addWidget(delete_btn)
         buttons.addWidget(gen_btn)
+        buttons.addWidget(edit_schedule_btn)
+        buttons.addWidget(remove_player_btn)
         buttons.addWidget(refresh_btn)
         buttons.addWidget(export_btn)
         buttons.addStretch()
@@ -238,7 +248,9 @@ class MainWindow(QMainWindow):
         try:
             self.member_service.delete_member(member_id)
             self.load_members()
-            QMessageBox.information(self, "Member Deleted", "Member deleted successfully.")
+            QMessageBox.information(
+                self, "Member Deleted", "Member deleted successfully."
+            )
         except Exception as exc:
             QMessageBox.critical(
                 self,
@@ -283,7 +295,9 @@ class MainWindow(QMainWindow):
         try:
             self.course_service.delete_course(course_id)
             self.load_courses()
-            QMessageBox.information(self, "Course Deleted", "Course deleted successfully.")
+            QMessageBox.information(
+                self, "Course Deleted", "Course deleted successfully."
+            )
         except Exception as exc:
             QMessageBox.critical(
                 self,
@@ -416,3 +430,92 @@ class MainWindow(QMainWindow):
             "About",
             f"{APP_NAME}\nVersion: {APP_VERSION}",
         )
+
+    def remove_selected_assignment(self):
+        assignment_id = self.selected_row_id(self.assignments_table)
+        if not assignment_id:
+            QMessageBox.warning(
+                self,
+                "No selection",
+                "Select an assigned player first.",
+            )
+            return
+
+        confirm = QMessageBox.question(
+            self,
+            "Remove Player",
+            "Remove this player from the selected outing?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if confirm != QMessageBox.Yes:
+            return
+
+        try:
+            self.outing_service.remove_assignment(assignment_id)
+            self.refresh_assignments()
+            QMessageBox.information(
+                self,
+                "Player Removed",
+                "The player was removed from the outing.",
+            )
+        except Exception as exc:
+            QMessageBox.critical(
+                self,
+                "Remove Failed",
+                f"Could not remove player from outing.\n\n{exc}",
+            )
+
+    def delete_outing(self):
+        outing_id = self.selected_row_id(self.outings_table)
+        if not outing_id:
+            QMessageBox.warning(
+                self,
+                "No selection",
+                "Select an outing first.",
+            )
+            return
+
+        confirm = QMessageBox.question(
+            self,
+            "Delete Outing",
+            "Delete this outing and all of its assignments?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if confirm != QMessageBox.Yes:
+            return
+
+        try:
+            self.outing_service.delete_outing(outing_id)
+            self.load_outings()
+            self.refresh_assignments()
+            QMessageBox.information(
+                self,
+                "Outing Deleted",
+                "The outing was deleted successfully.",
+            )
+        except Exception as exc:
+            QMessageBox.critical(
+                self,
+                "Delete Failed",
+                f"Could not delete outing.\n\n{exc}",
+            )
+
+    def edit_schedule(self):
+        outing_id = self.selected_row_id(self.outings_table)
+        if not outing_id:
+            QMessageBox.warning(
+                self,
+                "No selection",
+                "Select an outing first.",
+            )
+            return
+
+        dlg = ScheduleEditorDialog(
+            outing_id=outing_id,
+            outing_service=self.outing_service,
+            parent=self,
+        )
+        dlg.exec_()
+        self.refresh_assignments()

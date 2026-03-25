@@ -3,17 +3,16 @@ from __future__ import annotations
 from repositories.base_repository import BaseRepository
 from app.utils import build_tee_times, now_iso
 
+
 class OutingRepository(BaseRepository):
     def list_all(self):
         with self.db.get_conn() as conn:
-            return conn.execute(
-                """
+            return conn.execute("""
                 SELECT o.*, c.name AS course_name
                 FROM outings o
                 JOIN courses c ON c.id = o.course_id
                 ORDER BY o.outing_date DESC, o.start_time DESC
-                """
-            ).fetchall()
+                """).fetchall()
 
     def create(self, data: dict) -> int:
         now = now_iso()
@@ -26,11 +25,19 @@ class OutingRepository(BaseRepository):
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
-                    data["outing_date"], data["course_id"], data.get("start_time", "10:00"),
-                    data.get("tee_interval_minutes", 9), data.get("tee_time_count", 4),
-                    data.get("max_players_per_tee_time", 4), data.get("status", "draft"),
-                    data.get("version", 1), data.get("notes", ""), data.get("created_by"),
-                    data.get("updated_by"), now, now,
+                    data["outing_date"],
+                    data["course_id"],
+                    data.get("start_time", "10:00"),
+                    data.get("tee_interval_minutes", 9),
+                    data.get("tee_time_count", 4),
+                    data.get("max_players_per_tee_time", 4),
+                    data.get("status", "draft"),
+                    data.get("version", 1),
+                    data.get("notes", ""),
+                    data.get("created_by"),
+                    data.get("updated_by"),
+                    now,
+                    now,
                 ),
             )
             outing_id = cur.lastrowid
@@ -47,17 +54,26 @@ class OutingRepository(BaseRepository):
                 WHERE id=?
                 """,
                 (
-                    data["outing_date"], data["course_id"], data.get("start_time", "10:00"),
-                    data.get("tee_interval_minutes", 9), data.get("tee_time_count", 4),
-                    data.get("max_players_per_tee_time", 4), data.get("status", "draft"),
-                    data.get("version", 1), data.get("notes", ""), data.get("updated_by"),
-                    now_iso(), outing_id,
+                    data["outing_date"],
+                    data["course_id"],
+                    data.get("start_time", "10:00"),
+                    data.get("tee_interval_minutes", 9),
+                    data.get("tee_time_count", 4),
+                    data.get("max_players_per_tee_time", 4),
+                    data.get("status", "draft"),
+                    data.get("version", 1),
+                    data.get("notes", ""),
+                    data.get("updated_by"),
+                    now_iso(),
+                    outing_id,
                 ),
             )
             self._rebuild_tee_times(conn, outing_id)
 
     def _rebuild_tee_times(self, conn, outing_id: int) -> None:
-        outing = conn.execute("SELECT * FROM outings WHERE id=?", (outing_id,)).fetchone()
+        outing = conn.execute(
+            "SELECT * FROM outings WHERE id=?", (outing_id,)
+        ).fetchone()
         existing = conn.execute(
             "SELECT COUNT(*) AS count FROM tee_time_assignments a JOIN tee_times t ON t.id=a.tee_time_id WHERE t.outing_id=?",
             (outing_id,),
@@ -65,7 +81,11 @@ class OutingRepository(BaseRepository):
         if existing:
             return
         conn.execute("DELETE FROM tee_times WHERE outing_id=?", (outing_id,))
-        tee_times = build_tee_times(outing["start_time"], outing["tee_interval_minutes"], outing["tee_time_count"])
+        tee_times = build_tee_times(
+            outing["start_time"],
+            outing["tee_interval_minutes"],
+            outing["tee_time_count"],
+        )
         for idx, tee_time in enumerate(tee_times):
             conn.execute(
                 "INSERT INTO tee_times (outing_id, tee_time, position_index, max_players, locked) VALUES (?, ?, ?, ?, 0)",
@@ -94,18 +114,26 @@ class OutingRepository(BaseRepository):
         with self.db.get_conn() as conn:
             return conn.execute(
                 """
-                SELECT a.*, t.tee_time, t.position_index,
-                       m.first_name, m.last_name, m.email, m.handicap
-                FROM tee_time_assignments a
-                JOIN tee_times t ON t.id = a.tee_time_id
-                JOIN members m ON m.id = a.member_id
-                WHERE t.outing_id = ?
-                ORDER BY t.position_index, a.player_order_in_group
+                SELECT
+                    tta.id,
+                    tta.tee_time_id,
+                    tt.tee_time,
+                    m.first_name,
+                    m.last_name,
+                    m.email,
+                    m.handicap
+                FROM tee_time_assignments tta
+                JOIN tee_times tt ON tt.id = tta.tee_time_id
+                JOIN members m ON m.id = tta.member_id
+                WHERE tt.outing_id = ?
+                ORDER BY tt.position_index, m.last_name, m.first_name
                 """,
                 (outing_id,),
             ).fetchall()
 
-    def replace_assignments(self, outing_id: int, grouped_member_ids: list[list[int]]) -> None:
+    def replace_assignments(
+        self, outing_id: int, grouped_member_ids: list[list[int]]
+    ) -> None:
         with self.db.get_conn() as conn:
             tee_times = conn.execute(
                 "SELECT * FROM tee_times WHERE outing_id=? ORDER BY position_index",
@@ -134,3 +162,83 @@ class OutingRepository(BaseRepository):
                 "UPDATE outings SET version = version + 1, updated_at=? WHERE id=?",
                 (now_iso(), outing_id),
             )
+
+    def delete_assignment(self, assignment_id: int) -> None:
+        with self.db.get_conn() as conn:
+            conn.execute(
+                "DELETE FROM tee_time_assignments WHERE id = ?",
+                (assignment_id,),
+            )
+
+    def delete_assignments_by_outing(self, outing_id: int) -> None:
+        with self.db.get_conn() as conn:
+            conn.execute(
+                """
+                DELETE FROM tee_time_assignments
+                WHERE tee_time_id IN (
+                    SELECT id FROM tee_times WHERE outing_id = ?
+                )
+                """,
+                (outing_id,),
+            )
+
+    def delete_tee_times_by_outing(self, outing_id: int) -> None:
+        with self.db.get_conn() as conn:
+            conn.execute(
+                "DELETE FROM tee_times WHERE outing_id = ?",
+                (outing_id,),
+            )
+
+    def delete_outing(self, outing_id: int) -> None:
+        with self.db.get_conn() as conn:
+            conn.execute(
+                "DELETE FROM outings WHERE id = ?",
+                (outing_id,),
+            )
+
+    def get_unassigned_members_for_outing(self, outing_id: int):
+        with self.db.get_conn() as conn:
+            return conn.execute(
+                """
+                SELECT *
+                FROM members
+                WHERE active = 1
+                  AND id NOT IN (
+                      SELECT tta.member_id
+                      FROM tee_time_assignments tta
+                      JOIN tee_times tt ON tt.id = tta.tee_time_id
+                      WHERE tt.outing_id = ?
+                  )
+                ORDER BY last_name, first_name
+                """,
+                (outing_id,),
+            ).fetchall()
+
+    def get_tee_time_player_count(self, tee_time_id: int) -> int:
+        with self.db.get_conn() as conn:
+            row = conn.execute(
+                """
+                SELECT COUNT(*) AS player_count
+                FROM tee_time_assignments
+                WHERE tee_time_id = ?
+                """,
+                (tee_time_id,),
+            ).fetchone()
+            return int(row["player_count"]) if row else 0
+
+    def add_assignment(
+        self,
+        tee_time_id: int,
+        member_id: int,
+        player_order_in_group: int,
+    ) -> int:
+        with self.db.get_conn() as conn:
+            cur = conn.execute(
+                """
+                INSERT INTO tee_time_assignments
+                (tee_time_id, member_id, player_order_in_group, status, checked_in)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (tee_time_id, member_id, player_order_in_group, "scheduled", 0),
+            )
+            return cur.lastrowid
