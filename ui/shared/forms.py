@@ -1,25 +1,45 @@
-from PyQt5.QtWidgets import QDialog, QDialogButtonBox, QFormLayout, QLineEdit, QTextEdit, QSpinBox, QDoubleSpinBox, QComboBox, QDateEdit
+from PyQt5.QtWidgets import (
+    QDialog,
+    QDialogButtonBox,
+    QFormLayout,
+    QLineEdit,
+    QTextEdit,
+    QSpinBox,
+    QDoubleSpinBox,
+    QComboBox,
+    QDateEdit,
+    QMessageBox,
+)
 from PyQt5.QtCore import QDate
+
 
 class MemberFormDialog(QDialog):
     def __init__(self, member=None):
         super().__init__()
         self.setWindowTitle("Member")
+
         self.first_name = QLineEdit(member["first_name"] if member else "")
         self.last_name = QLineEdit(member["last_name"] if member else "")
         self.email = QLineEdit(member["email"] if member else "")
         self.phone = QLineEdit(member["phone"] if member else "")
+
         self.handicap = QDoubleSpinBox()
         self.handicap.setRange(-10, 54)
         self.handicap.setDecimals(1)
-        self.handicap.setValue(float(member["handicap"]) if member else 0)
+
+        handicap_value = 0.0
+        if member and member["handicap"] is not None:
+            handicap_value = float(member["handicap"])
+        self.handicap.setValue(handicap_value)
+
         self.joined_date = QDateEdit()
         self.joined_date.setCalendarPopup(True)
         if member and member["joined_date"]:
-            y,m,d = [int(x) for x in member["joined_date"].split("-")]
-            self.joined_date.setDate(QDate(y,m,d))
+            y, m, d = [int(x) for x in member["joined_date"].split("-")]
+            self.joined_date.setDate(QDate(y, m, d))
         else:
             self.joined_date.setDate(QDate.currentDate())
+
         self.notes = QTextEdit(member["notes"] if member else "")
 
         form = QFormLayout(self)
@@ -36,17 +56,37 @@ class MemberFormDialog(QDialog):
         buttons.rejected.connect(self.reject)
         form.addRow(buttons)
 
+    def accept(self):
+        first_name = self.first_name.text().strip()
+        last_name = self.last_name.text().strip()
+        email = self.email.text().strip()
+        phone = self.phone.text().strip()
+
+        if not first_name or not last_name or not email or not phone:
+            QMessageBox.warning(
+                self,
+                "Missing Required Fields",
+                "First name, last name, email, and phone are required.",
+            )
+            return
+
+        super().accept()
+
     def values(self):
+        handicap_value = float(self.handicap.value())
+        handicap = None if handicap_value == 0.0 else handicap_value
+
         return {
             "first_name": self.first_name.text().strip(),
             "last_name": self.last_name.text().strip(),
-            "email": self.email.text().strip(),
+            "email": self.email.text().strip().lower(),
             "phone": self.phone.text().strip(),
-            "handicap": float(self.handicap.value()),
+            "handicap": handicap,
             "joined_date": self.joined_date.date().toString("yyyy-MM-dd"),
             "notes": self.notes.toPlainText().strip(),
             "active": 1,
         }
+
 
 class CourseFormDialog(QDialog):
     def __init__(self, course=None):
@@ -88,6 +128,7 @@ class CourseFormDialog(QDialog):
             "active": 1,
         }
 
+
 class OutingFormDialog(QDialog):
     def __init__(self, courses, outing=None):
         super().__init__()
@@ -98,26 +139,35 @@ class OutingFormDialog(QDialog):
             label = row["name"]
             self.course.addItem(label, row["id"])
             self.course_map[row["id"]] = row["name"]
+
         self.outing_date = QDateEdit()
         self.outing_date.setCalendarPopup(True)
         self.outing_date.setDate(QDate.currentDate())
+
         self.start_time = QLineEdit(outing["start_time"] if outing else "10:00")
+
         self.interval = QSpinBox()
         self.interval.setRange(1, 30)
         self.interval.setValue(int(outing["tee_interval_minutes"]) if outing else 9)
+
         self.tee_count = QSpinBox()
         self.tee_count.setRange(1, 20)
         self.tee_count.setValue(int(outing["tee_time_count"]) if outing else 4)
+
         self.max_players = QSpinBox()
         self.max_players.setRange(2, 4)
-        self.max_players.setValue(int(outing["max_players_per_tee_time"]) if outing else 4)
+        self.max_players.setValue(
+            int(outing["max_players_per_tee_time"]) if outing else 4
+        )
+
         self.status = QComboBox()
         self.status.addItems(["draft", "published", "completed", "cancelled"])
+
         self.notes = QTextEdit(outing["notes"] if outing else "")
 
         if outing:
-            y,m,d = [int(x) for x in outing["outing_date"].split("-")]
-            self.outing_date.setDate(QDate(y,m,d))
+            y, m, d = [int(x) for x in outing["outing_date"].split("-")]
+            self.outing_date.setDate(QDate(y, m, d))
             idx = self.course.findData(outing["course_id"])
             if idx >= 0:
                 self.course.setCurrentIndex(idx)
