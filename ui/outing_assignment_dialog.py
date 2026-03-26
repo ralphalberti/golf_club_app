@@ -1,68 +1,257 @@
+from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
-    QDialog, QHBoxLayout, QListWidget, QVBoxLayout, QPushButton, QLabel, QMessageBox
+    QDialog,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
+    QListWidget,
+    QListWidgetItem,
+    QPushButton,
+    QLineEdit,
+    QMessageBox,
 )
+
 
 class OutingAssignmentDialog(QDialog):
     def __init__(self, members, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Select Players for Schedule Generation")
-        self.resize(700, 400)
+        self.resize(950, 600)
 
-        self.available = QListWidget()
-        self.selected = QListWidget()
-        for member in members:
-            self.available.addItem(f"{member['id']} - {member['first_name']} {member['last_name']}")
+        self.all_members = list(members)
+        self.selected_member_ids_set = set()
 
-        move_right = QPushButton(">>")
-        move_left = QPushButton("<<")
-        move_right.clicked.connect(self.add_member)
-        move_left.clicked.connect(self.remove_member)
+        self.search_edit = QLineEdit()
+        self.search_edit.setPlaceholderText("Search members by name...")
 
-        controls = QVBoxLayout()
-        controls.addStretch()
-        controls.addWidget(move_right)
-        controls.addWidget(move_left)
-        controls.addStretch()
+        self.available_label = QLabel("Available Members")
+        self.selected_label = QLabel("Selected Players: 0")
+        self.capacity_label = QLabel("Capacity: --   Selected: 0   Remaining: --")
 
-        left = QVBoxLayout()
-        left.addWidget(QLabel("Available members"))
-        left.addWidget(self.available)
+        self.available_list = QListWidget()
+        self.selected_list = QListWidget()
 
-        right = QVBoxLayout()
-        right.addWidget(QLabel("Selected members"))
-        right.addWidget(self.selected)
+        self.add_button = QPushButton("Add →")
+        self.remove_button = QPushButton("← Remove")
+        self.select_all_button = QPushButton("Select All Visible")
+        self.clear_button = QPushButton("Clear Selection")
+        self.ok_button = QPushButton("Generate Schedule")
+        self.cancel_button = QPushButton("Cancel")
 
-        buttons = QHBoxLayout()
-        ok_btn = QPushButton("Generate")
-        cancel_btn = QPushButton("Cancel")
-        ok_btn.clicked.connect(self.accept)
-        cancel_btn.clicked.connect(self.reject)
-        buttons.addStretch()
-        buttons.addWidget(ok_btn)
-        buttons.addWidget(cancel_btn)
+        self.add_button.clicked.connect(self.add_selected_members)
+        self.remove_button.clicked.connect(self.remove_selected_members)
+        self.select_all_button.clicked.connect(self.select_all_visible)
+        self.clear_button.clicked.connect(self.clear_selection)
+        self.ok_button.clicked.connect(self.accept_with_validation)
+        self.cancel_button.clicked.connect(self.reject)
+        self.search_edit.textChanged.connect(self.refresh_available_members)
 
-        top = QHBoxLayout()
-        top.addLayout(left)
-        top.addLayout(controls)
-        top.addLayout(right)
+        main_layout = QVBoxLayout(self)
 
-        layout = QVBoxLayout(self)
-        layout.addLayout(top)
-        layout.addLayout(buttons)
+        top_layout = QVBoxLayout()
+        top_layout.addWidget(self.capacity_label)
+        top_layout.addWidget(self.search_edit)
 
-    def add_member(self):
-        item = self.available.currentItem()
-        if item:
-            self.selected.addItem(self.available.takeItem(self.available.row(item)))
+        content_layout = QHBoxLayout()
 
-    def remove_member(self):
-        item = self.selected.currentItem()
-        if item:
-            self.available.addItem(self.selected.takeItem(self.selected.row(item)))
+        left_layout = QVBoxLayout()
+        left_layout.addWidget(self.available_label)
+        left_layout.addWidget(self.available_list)
+
+        middle_layout = QVBoxLayout()
+        middle_layout.addStretch()
+        middle_layout.addWidget(self.add_button)
+        middle_layout.addWidget(self.remove_button)
+        middle_layout.addWidget(self.select_all_button)
+        middle_layout.addWidget(self.clear_button)
+        middle_layout.addStretch()
+
+        right_layout = QVBoxLayout()
+        right_layout.addWidget(self.selected_label)
+        right_layout.addWidget(self.selected_list)
+
+        button_layout = QHBoxLayout()
+        button_layout.addStretch()
+        button_layout.addWidget(self.ok_button)
+        button_layout.addWidget(self.cancel_button)
+
+        content_layout.addLayout(left_layout, 3)
+        content_layout.addLayout(middle_layout, 1)
+        content_layout.addLayout(right_layout, 3)
+
+        main_layout.addLayout(top_layout)
+        main_layout.addLayout(content_layout)
+        main_layout.addLayout(button_layout)
+
+        self._refresh_capacity_summary()
+        self.refresh_available_members()
+        self.refresh_selected_members()
+
+    def _member_display_name(self, row):
+        return f"{row['first_name']} {row['last_name']}".strip()
+
+    def _member_sort_key(self, row):
+        return (
+            str(row["last_name"]).lower(),
+            str(row["first_name"]).lower(),
+            int(row["id"]),
+        )
+
+    def _get_capacity(self):
+        parent = self.parent()
+        if parent is None:
+            return None
+
+        outing_id = parent.selected_row_id(parent.outings_table)
+        if not outing_id:
+            return None
+
+        tee_times = parent.outing_service.get_tee_times(outing_id)
+        if not tee_times:
+            return None
+
+        return sum(int(row["max_players"]) for row in tee_times)
+
+    def _refresh_capacity_summary(self):
+        capacity = self._get_capacity()
+        selected = len(self.selected_member_ids_set)
+
+        if capacity is None:
+            self.capacity_label.setText(
+                f"Capacity: --   Selected: {selected}   Remaining: --"
+            )
+            return
+
+        remaining = capacity - selected
+        self.capacity_label.setText(
+            f"Capacity: {capacity}   Selected: {selected}   Remaining: {remaining}"
+        )
+
+    def refresh_available_members(self):
+        self.available_list.clear()
+
+        search_text = self.search_edit.text().strip().lower()
+        filtered = []
+
+        for row in sorted(self.all_members, key=self._member_sort_key):
+            member_id = int(row["id"])
+            if member_id in self.selected_member_ids_set:
+                continue
+
+            full_name = self._member_display_name(row)
+            if search_text and search_text not in full_name.lower():
+                continue
+
+            filtered.append(row)
+
+        for row in filtered:
+            item = QListWidgetItem(self._member_display_name(row))
+            item.setData(Qt.UserRole, int(row["id"]))
+            self.available_list.addItem(item)
+
+    def refresh_selected_members(self):
+        self.selected_list.clear()
+
+        selected_rows = [
+            row
+            for row in self.all_members
+            if int(row["id"]) in self.selected_member_ids_set
+        ]
+        selected_rows = sorted(selected_rows, key=self._member_sort_key)
+
+        for idx, row in enumerate(selected_rows, start=1):
+            item = QListWidgetItem(f"{idx}. {self._member_display_name(row)}")
+            item.setData(Qt.UserRole, int(row["id"]))
+            self.selected_list.addItem(item)
+
+        self.selected_label.setText(f"Selected Players: {len(selected_rows)}")
+        self._refresh_capacity_summary()
+
+    def add_selected_members(self):
+        items = self.available_list.selectedItems()
+        if not items:
+            return
+
+        capacity = self._get_capacity()
+        current_selected = len(self.selected_member_ids_set)
+
+        for item in items:
+            member_id = int(item.data(Qt.UserRole))
+
+            if capacity is not None and current_selected >= capacity:
+                QMessageBox.warning(
+                    self,
+                    "Capacity Reached",
+                    f"You cannot select more than {capacity} players for this outing.",
+                )
+                break
+
+            if member_id not in self.selected_member_ids_set:
+                self.selected_member_ids_set.add(member_id)
+                current_selected += 1
+
+        self.refresh_available_members()
+        self.refresh_selected_members()
+
+    def remove_selected_members(self):
+        items = self.selected_list.selectedItems()
+        if not items:
+            return
+
+        for item in items:
+            member_id = int(item.data(Qt.UserRole))
+            self.selected_member_ids_set.discard(member_id)
+
+        self.refresh_available_members()
+        self.refresh_selected_members()
+
+    def select_all_visible(self):
+        capacity = self._get_capacity()
+        current_selected = len(self.selected_member_ids_set)
+
+        for i in range(self.available_list.count()):
+            item = self.available_list.item(i)
+            member_id = int(item.data(Qt.UserRole))
+
+            if capacity is not None and current_selected >= capacity:
+                break
+
+            if member_id not in self.selected_member_ids_set:
+                self.selected_member_ids_set.add(member_id)
+                current_selected += 1
+
+        self.refresh_available_members()
+        self.refresh_selected_members()
+
+    def clear_selection(self):
+        self.selected_member_ids_set.clear()
+        self.refresh_available_members()
+        self.refresh_selected_members()
 
     def selected_member_ids(self):
-        ids = []
-        for i in range(self.selected.count()):
-            text = self.selected.item(i).text()
-            ids.append(int(text.split(" - ")[0]))
-        return ids
+        selected_rows = [
+            row
+            for row in self.all_members
+            if int(row["id"]) in self.selected_member_ids_set
+        ]
+        selected_rows = sorted(selected_rows, key=self._member_sort_key)
+        return [int(row["id"]) for row in selected_rows]
+
+    def accept_with_validation(self):
+        selected_ids = self.selected_member_ids()
+        if not selected_ids:
+            QMessageBox.warning(
+                self, "No Players Selected", "Select at least one player."
+            )
+            return
+
+        capacity = self._get_capacity()
+        if capacity is not None and len(selected_ids) > capacity:
+            QMessageBox.warning(
+                self,
+                "Too Many Players",
+                f"You selected {len(selected_ids)} players, but the outing capacity is {capacity}.",
+            )
+            return
+
+        self.accept()

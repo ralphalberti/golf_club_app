@@ -8,10 +8,16 @@ class OutingRepository(BaseRepository):
     def list_all(self):
         with self.db.get_conn() as conn:
             return conn.execute("""
-                SELECT o.*, c.name AS course_name
+                SELECT
+                    o.id,
+                    o.outing_date,
+                    c.name AS course_name,
+                    o.start_time,
+                    o.notes,
+                    o.status
                 FROM outings o
                 JOIN courses c ON c.id = o.course_id
-                ORDER BY o.outing_date DESC, o.start_time DESC
+                ORDER BY o.outing_date, o.start_time
                 """).fetchall()
 
     def create(self, data: dict) -> int:

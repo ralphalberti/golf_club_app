@@ -1,22 +1,25 @@
+from PyQt5.QtCore import Qt, QTimer
+
 from PyQt5.QtWidgets import (
+    QAction,
+    QFileDialog,
+    QHeaderView,
+    QHBoxLayout,
     QMainWindow,
-    QWidget,
-    QVBoxLayout,
-    QTabWidget,
+    QMessageBox,
+    QPushButton,
     QTableWidget,
     QTableWidgetItem,
-    QPushButton,
-    QHBoxLayout,
-    QMessageBox,
-    QFileDialog,
-    QAction,
+    QTabWidget,
+    QVBoxLayout,
+    QWidget,
 )
 
 from app.config import APP_NAME
 from app.constants import APP_VERSION
-from ui.shared.forms import MemberFormDialog, CourseFormDialog, OutingFormDialog
 from ui.outing_assignment_dialog import OutingAssignmentDialog
 from ui.schedule_editor_dialog import ScheduleEditorDialog
+from ui.shared.forms import MemberFormDialog, CourseFormDialog, OutingFormDialog
 
 
 class MainWindow(QMainWindow):
@@ -51,6 +54,8 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self._build_members_tab(), "Members")
         self.tabs.addTab(self._build_courses_tab(), "Courses")
         self.tabs.addTab(self._build_outings_tab(), "Outings / Schedules")
+
+        self.tabs.currentChanged.connect(self._on_tab_changed)
 
         container = QWidget()
         layout = QVBoxLayout(container)
@@ -183,28 +188,105 @@ class MainWindow(QMainWindow):
         for r, row in enumerate(rows):
             for c, col in enumerate(columns):
                 value = row[col]
-                table.setItem(
-                    r,
-                    c,
-                    QTableWidgetItem("" if value is None else str(value)),
-                )
+                item = QTableWidgetItem("" if value is None else str(value))
+                if c == 0 and "id" in row.keys():
+                    item.setData(Qt.UserRole, row["id"])
+                table.setItem(r, c, item)
 
         table.resizeColumnsToContents()
 
     def selected_row_id(self, table):
         row = table.currentRow()
-        if row < 0 or table.columnCount() == 0:
+        if row < 0:
             return None
-        return int(table.item(row, 0).text())
+
+        item = table.item(row, 0)
+        if not item:
+            return None
+
+        hidden_id = item.data(Qt.UserRole)
+        if hidden_id is not None:
+            return int(hidden_id)
+
+        text = item.text().strip()
+        if text.isdigit():
+            return int(text)
+
+        return None
 
     def load_members(self):
-        self._populate_table(self.members_table, self.member_service.list_members())
+        rows = self.member_service.list_members()
+        self._populate_table(self.members_table, rows)
 
     def load_courses(self):
-        self._populate_table(self.courses_table, self.course_service.list_courses())
+        rows = self.course_service.list_courses()
+        self._populate_table(self.courses_table, rows)
 
     def load_outings(self):
-        self._populate_table(self.outings_table, self.outing_service.list_outings())
+        outings = self.outing_service.list_outings()
+
+        self.outings_table.clear()
+        self.outings_table.setRowCount(0)
+        self.outings_table.setColumnCount(5)
+        self.outings_table.setHorizontalHeaderLabels(
+            ["Outing Date", "Course", "Start Time", "Status", "Notes"]
+        )
+
+        for row_idx, row in enumerate(outings):
+            self.outings_table.insertRow(row_idx)
+
+            row_keys = set(row.keys())
+
+            outing_date = (
+                row["outing_date"]
+                if "outing_date" in row_keys and row["outing_date"] is not None
+                else ""
+            )
+            course_name = (
+                row["course_name"]
+                if "course_name" in row_keys and row["course_name"] is not None
+                else ""
+            )
+            start_time = (
+                row["start_time"]
+                if "start_time" in row_keys and row["start_time"] is not None
+                else ""
+            )
+            status = (
+                row["status"]
+                if "status" in row_keys and row["status"] is not None
+                else ""
+            )
+            notes = (
+                row["notes"] if "notes" in row_keys and row["notes"] is not None else ""
+            )
+
+            outing_date_item = QTableWidgetItem(str(outing_date))
+            outing_date_item.setData(Qt.UserRole, row["id"])
+            outing_date_item.setTextAlignment(Qt.AlignCenter)
+
+            course_item = QTableWidgetItem(str(course_name))
+            course_item.setTextAlignment(Qt.AlignVCenter | Qt.AlignLeft)
+
+            start_time_item = QTableWidgetItem(str(start_time))
+            start_time_item.setTextAlignment(Qt.AlignCenter)
+
+            status_item = QTableWidgetItem(str(status))
+            status_item.setTextAlignment(Qt.AlignCenter)
+
+            notes_item = QTableWidgetItem(str(notes))
+            notes_item.setTextAlignment(Qt.AlignVCenter | Qt.AlignLeft)
+
+            self.outings_table.setItem(row_idx, 0, outing_date_item)
+            self.outings_table.setItem(row_idx, 1, course_item)
+            self.outings_table.setItem(row_idx, 2, start_time_item)
+            self.outings_table.setItem(row_idx, 3, status_item)
+            self.outings_table.setItem(row_idx, 4, notes_item)
+
+        self._resize_outings_table_columns()
+
+        # Run once more after Qt finishes laying out the table
+        QTimer.singleShot(0, self._resize_outings_table_columns)
 
     def refresh_assignments(self):
         outing_id = self.selected_row_id(self.outings_table)
@@ -220,6 +302,7 @@ class MainWindow(QMainWindow):
     def edit_member(self):
         member_id = self.selected_row_id(self.members_table)
         if not member_id:
+            QMessageBox.warning(self, "No selection", "Select a member first.")
             return
 
         member, _ = self.member_service.get_member(member_id)
@@ -267,6 +350,7 @@ class MainWindow(QMainWindow):
     def edit_course(self):
         course_id = self.selected_row_id(self.courses_table)
         if not course_id:
+            QMessageBox.warning(self, "No selection", "Select a course first.")
             return
 
         course = self.course_service.get_course(course_id)
@@ -322,6 +406,7 @@ class MainWindow(QMainWindow):
     def edit_outing(self):
         outing_id = self.selected_row_id(self.outings_table)
         if not outing_id:
+            QMessageBox.warning(self, "No selection", "Select an outing first.")
             return
 
         outing = self.outing_service.get_outing(outing_id)
@@ -334,6 +419,39 @@ class MainWindow(QMainWindow):
             values["version"] = outing["version"]
             self.outing_service.update_outing(outing_id, values)
             self.load_outings()
+            self.refresh_assignments()
+
+    def delete_outing(self):
+        outing_id = self.selected_row_id(self.outings_table)
+        if not outing_id:
+            QMessageBox.warning(self, "No selection", "Select an outing first.")
+            return
+
+        confirm = QMessageBox.question(
+            self,
+            "Delete Outing",
+            "Delete this outing and all of its assignments?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if confirm != QMessageBox.Yes:
+            return
+
+        try:
+            self.outing_service.delete_outing(outing_id)
+            self.load_outings()
+            self.refresh_assignments()
+            QMessageBox.information(
+                self,
+                "Outing Deleted",
+                "The outing was deleted successfully.",
+            )
+        except Exception as exc:
+            QMessageBox.critical(
+                self,
+                "Delete Failed",
+                f"Could not delete outing.\n\n{exc}",
+            )
 
     def generate_schedule(self):
         outing_id = self.selected_row_id(self.outings_table)
@@ -362,9 +480,59 @@ class MainWindow(QMainWindow):
             "The outing schedule has been generated.",
         )
 
+    def edit_schedule(self):
+        outing_id = self.selected_row_id(self.outings_table)
+        if not outing_id:
+            QMessageBox.warning(self, "No selection", "Select an outing first.")
+            return
+
+        dlg = ScheduleEditorDialog(
+            outing_id=outing_id,
+            outing_service=self.outing_service,
+            parent=self,
+        )
+        dlg.exec_()
+        self.refresh_assignments()
+
+    def remove_selected_assignment(self):
+        assignment_id = self.selected_row_id(self.assignments_table)
+        if not assignment_id:
+            QMessageBox.warning(
+                self,
+                "No selection",
+                "Select an assigned player first.",
+            )
+            return
+
+        confirm = QMessageBox.question(
+            self,
+            "Remove Player",
+            "Remove this player from the selected outing?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if confirm != QMessageBox.Yes:
+            return
+
+        try:
+            self.outing_service.remove_assignment(assignment_id)
+            self.refresh_assignments()
+            QMessageBox.information(
+                self,
+                "Player Removed",
+                "The player was removed from the outing.",
+            )
+        except Exception as exc:
+            QMessageBox.critical(
+                self,
+                "Remove Failed",
+                f"Could not remove player from outing.\n\n{exc}",
+            )
+
     def export_outputs(self):
         outing_id = self.selected_row_id(self.outings_table)
         if not outing_id:
+            QMessageBox.warning(self, "No selection", "Select an outing first.")
             return
 
         outing = self.outing_service.get_outing(outing_id)
@@ -431,91 +599,32 @@ class MainWindow(QMainWindow):
             f"{APP_NAME}\nVersion: {APP_VERSION}",
         )
 
-    def remove_selected_assignment(self):
-        assignment_id = self.selected_row_id(self.assignments_table)
-        if not assignment_id:
-            QMessageBox.warning(
-                self,
-                "No selection",
-                "Select an assigned player first.",
-            )
+    def _resize_outings_table_columns(self):
+        table = self.outings_table
+        if table.columnCount() != 5:
             return
 
-        confirm = QMessageBox.question(
-            self,
-            "Remove Player",
-            "Remove this player from the selected outing?",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No,
-        )
-        if confirm != QMessageBox.Yes:
+        total_width = table.viewport().width()
+        if total_width <= 0:
             return
 
-        try:
-            self.outing_service.remove_assignment(assignment_id)
-            self.refresh_assignments()
-            QMessageBox.information(
-                self,
-                "Player Removed",
-                "The player was removed from the outing.",
-            )
-        except Exception as exc:
-            QMessageBox.critical(
-                self,
-                "Remove Failed",
-                f"Could not remove player from outing.\n\n{exc}",
-            )
+        notes_width = int(total_width * 0.32)
+        other_width = int((total_width - notes_width) / 4)
 
-    def delete_outing(self):
-        outing_id = self.selected_row_id(self.outings_table)
-        if not outing_id:
-            QMessageBox.warning(
-                self,
-                "No selection",
-                "Select an outing first.",
-            )
-            return
+        header = table.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.Fixed)
 
-        confirm = QMessageBox.question(
-            self,
-            "Delete Outing",
-            "Delete this outing and all of its assignments?",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No,
-        )
-        if confirm != QMessageBox.Yes:
-            return
+        table.setColumnWidth(0, other_width)  # Outing Date
+        table.setColumnWidth(1, other_width)  # Course
+        table.setColumnWidth(2, other_width)  # Start Time
+        table.setColumnWidth(3, other_width)  # Status
+        table.setColumnWidth(4, notes_width)  # Notes
 
-        try:
-            self.outing_service.delete_outing(outing_id)
-            self.load_outings()
-            self.refresh_assignments()
-            QMessageBox.information(
-                self,
-                "Outing Deleted",
-                "The outing was deleted successfully.",
-            )
-        except Exception as exc:
-            QMessageBox.critical(
-                self,
-                "Delete Failed",
-                f"Could not delete outing.\n\n{exc}",
-            )
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._resize_outings_table_columns()
 
-    def edit_schedule(self):
-        outing_id = self.selected_row_id(self.outings_table)
-        if not outing_id:
-            QMessageBox.warning(
-                self,
-                "No selection",
-                "Select an outing first.",
-            )
-            return
-
-        dlg = ScheduleEditorDialog(
-            outing_id=outing_id,
-            outing_service=self.outing_service,
-            parent=self,
-        )
-        dlg.exec_()
-        self.refresh_assignments()
+    def _on_tab_changed(self, index):
+        # Assuming outings tab is index 2
+        if index == 2:
+            QTimer.singleShot(0, self._resize_outings_table_columns)
