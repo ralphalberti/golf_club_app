@@ -34,6 +34,8 @@ class MainWindow(QMainWindow):
         distribution_service,
     ):
         super().__init__()
+
+        # Services / state
         self.current_user = current_user
         self.member_service = member_service
         self.course_service = course_service
@@ -42,26 +44,40 @@ class MainWindow(QMainWindow):
         self.scheduling_service = scheduling_service
         self.distribution_service = distribution_service
 
+        # Window setup
         self.setWindowTitle(APP_NAME)
         self.resize(1200, 720)
 
+        # Core widgets
         self.tabs = QTabWidget()
         self.members_table = QTableWidget()
         self.courses_table = QTableWidget()
         self.outings_table = QTableWidget()
         self.assignments_table = QTableWidget()
 
+        # Table behavior
+        self.outings_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.outings_table.setSelectionMode(QTableWidget.SingleSelection)
+
+        self.assignments_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.assignments_table.setSelectionMode(QTableWidget.SingleSelection)
+
+        # Tabs
         self.tabs.addTab(self._build_members_tab(), "Members")
         self.tabs.addTab(self._build_courses_tab(), "Courses")
         self.tabs.addTab(self._build_outings_tab(), "Outings / Schedules")
 
+        # Signals
         self.tabs.currentChanged.connect(self._on_tab_changed)
+        self.outings_table.itemSelectionChanged.connect(self.refresh_assignments)
 
+        # Central layout
         container = QWidget()
         layout = QVBoxLayout(container)
         layout.addWidget(self.tabs)
         self.setCentralWidget(container)
 
+        # Final setup
         self._build_menu_bar()
         self.refresh_all()
 
@@ -291,7 +307,42 @@ class MainWindow(QMainWindow):
     def refresh_assignments(self):
         outing_id = self.selected_row_id(self.outings_table)
         rows = self.outing_service.get_assignments(outing_id) if outing_id else []
-        self._populate_table(self.assignments_table, rows)
+
+        self.assignments_table.clear()
+        self.assignments_table.setRowCount(0)
+        self.assignments_table.setColumnCount(5)
+        self.assignments_table.setHorizontalHeaderLabels(
+            ["Tee Time", "First Name", "Last Name", "Email", "Handicap"]
+        )
+
+        for row_idx, row in enumerate(rows):
+            self.assignments_table.insertRow(row_idx)
+
+            tee_time_item = QTableWidgetItem(str(row["tee_time"] or ""))
+            tee_time_item.setData(Qt.UserRole, row["id"])  # hidden assignment id
+            tee_time_item.setTextAlignment(Qt.AlignCenter)
+
+            first_name_item = QTableWidgetItem(str(row["first_name"] or ""))
+            first_name_item.setTextAlignment(Qt.AlignVCenter | Qt.AlignLeft)
+
+            last_name_item = QTableWidgetItem(str(row["last_name"] or ""))
+            last_name_item.setTextAlignment(Qt.AlignVCenter | Qt.AlignLeft)
+
+            email_item = QTableWidgetItem(str(row["email"] or ""))
+            email_item.setTextAlignment(Qt.AlignVCenter | Qt.AlignLeft)
+
+            handicap_value = "" if row["handicap"] is None else str(row["handicap"])
+            handicap_item = QTableWidgetItem(handicap_value)
+            handicap_item.setTextAlignment(Qt.AlignCenter)
+
+            self.assignments_table.setItem(row_idx, 0, tee_time_item)
+            self.assignments_table.setItem(row_idx, 1, first_name_item)
+            self.assignments_table.setItem(row_idx, 2, last_name_item)
+            self.assignments_table.setItem(row_idx, 3, email_item)
+            self.assignments_table.setItem(row_idx, 4, handicap_item)
+
+        self.assignments_table.resizeColumnsToContents()
+        self.assignments_table.horizontalHeader().setStretchLastSection(True)
 
     def add_member(self):
         dlg = MemberFormDialog()
@@ -471,8 +522,11 @@ class MainWindow(QMainWindow):
 
         self.scheduling_service.generate_schedule(outing_id, member_ids)
         self.outing_service.increment_version(outing_id)
+
         self.load_outings()
+        self.select_outing_row_by_id(outing_id)
         self.refresh_assignments()
+        self.assignments_table.setFocus()
 
         QMessageBox.information(
             self,
@@ -628,3 +682,15 @@ class MainWindow(QMainWindow):
         # Assuming outings tab is index 2
         if index == 2:
             QTimer.singleShot(0, self._resize_outings_table_columns)
+
+    def select_outing_row_by_id(self, outing_id: int):
+        for row in range(self.outings_table.rowCount()):
+            item = self.outings_table.item(row, 0)
+            if not item:
+                continue
+
+            hidden_id = item.data(Qt.UserRole)
+            if hidden_id is not None and int(hidden_id) == int(outing_id):
+                self.outings_table.selectRow(row)
+                self.outings_table.setCurrentCell(row, 0)
+                return
