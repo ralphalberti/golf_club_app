@@ -56,6 +56,12 @@ class MainWindow(QMainWindow):
         self.assignments_table = QTableWidget()
 
         # Table behavior
+        self.members_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.members_table.setSelectionMode(QTableWidget.SingleSelection)
+
+        self.courses_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.courses_table.setSelectionMode(QTableWidget.SingleSelection)
+
         self.outings_table.setSelectionBehavior(QTableWidget.SelectRows)
         self.outings_table.setSelectionMode(QTableWidget.SingleSelection)
 
@@ -232,11 +238,124 @@ class MainWindow(QMainWindow):
 
     def load_members(self):
         rows = self.member_service.list_members()
-        self._populate_table(self.members_table, rows)
+
+        self.members_table.clear()
+        self.members_table.setRowCount(0)
+        self.members_table.setColumnCount(8)
+        self.members_table.setHorizontalHeaderLabels(
+            [
+                "First Name",
+                "Last Name",
+                "Email",
+                "Phone",
+                "Handicap",
+                "Joined",
+                "Active",
+                "Notes",
+            ]
+        )
+
+        for row_idx, row in enumerate(rows):
+            self.members_table.insertRow(row_idx)
+
+            first_name_item = QTableWidgetItem(str(row["first_name"] or ""))
+            first_name_item.setData(Qt.UserRole, row["id"])  # hidden member id
+            first_name_item.setTextAlignment(Qt.AlignVCenter | Qt.AlignLeft)
+
+            last_name_item = QTableWidgetItem(str(row["last_name"] or ""))
+            last_name_item.setTextAlignment(Qt.AlignVCenter | Qt.AlignLeft)
+
+            email_item = QTableWidgetItem(str(row["email"] or ""))
+            email_item.setTextAlignment(Qt.AlignVCenter | Qt.AlignLeft)
+
+            phone_item = QTableWidgetItem(str(row["phone"] or ""))
+            phone_item.setTextAlignment(Qt.AlignVCenter | Qt.AlignLeft)
+
+            handicap_value = "" if row["handicap"] is None else str(row["handicap"])
+            handicap_item = QTableWidgetItem(handicap_value)
+            handicap_item.setTextAlignment(Qt.AlignCenter)
+
+            joined_item = QTableWidgetItem(str(row["joined_date"] or ""))
+            joined_item.setTextAlignment(Qt.AlignCenter)
+
+            active_text = "Yes" if int(row["active"]) == 1 else "No"
+            active_item = QTableWidgetItem(active_text)
+            active_item.setTextAlignment(Qt.AlignCenter)
+
+            notes_item = QTableWidgetItem(str(row["notes"] or ""))
+            notes_item.setTextAlignment(Qt.AlignVCenter | Qt.AlignLeft)
+
+            self.members_table.setItem(row_idx, 0, first_name_item)
+            self.members_table.setItem(row_idx, 1, last_name_item)
+            self.members_table.setItem(row_idx, 2, email_item)
+            self.members_table.setItem(row_idx, 3, phone_item)
+            self.members_table.setItem(row_idx, 4, handicap_item)
+            self.members_table.setItem(row_idx, 5, joined_item)
+            self.members_table.setItem(row_idx, 6, active_item)
+            self.members_table.setItem(row_idx, 7, notes_item)
+
+        self.members_table.resizeColumnsToContents()
+        self.members_table.horizontalHeader().setStretchLastSection(True)
 
     def load_courses(self):
         rows = self.course_service.list_courses()
-        self._populate_table(self.courses_table, rows)
+
+        self.courses_table.clear()
+        self.courses_table.setRowCount(0)
+        self.courses_table.setColumnCount(7)
+        self.courses_table.setHorizontalHeaderLabels(
+            [
+                "Course",
+                "Address",
+                "Active",
+                "Notes",
+                "Contact Name",
+                "Contact Email",
+                "Preferred Format",
+            ]
+        )
+
+        for row_idx, row in enumerate(rows):
+            self.courses_table.insertRow(row_idx)
+
+            course_item = QTableWidgetItem(str(row["name"] or ""))
+            course_item.setData(Qt.UserRole, row["id"])  # hidden course id
+            course_item.setTextAlignment(Qt.AlignVCenter | Qt.AlignLeft)
+
+            address_item = QTableWidgetItem(str(row["address"] or ""))
+            address_item.setTextAlignment(Qt.AlignVCenter | Qt.AlignLeft)
+
+            active_value = (
+                row["active"]
+                if "active" in row.keys()
+                else row.get("default_active", 1)
+            )
+            active_text = "Yes" if int(active_value) == 1 else "No"
+            active_item = QTableWidgetItem(active_text)
+            active_item.setTextAlignment(Qt.AlignCenter)
+
+            notes_item = QTableWidgetItem(str(row["notes"] or ""))
+            notes_item.setTextAlignment(Qt.AlignVCenter | Qt.AlignLeft)
+
+            contact_name_item = QTableWidgetItem(str(row["contact_name"] or ""))
+            contact_name_item.setTextAlignment(Qt.AlignVCenter | Qt.AlignLeft)
+
+            contact_email_item = QTableWidgetItem(str(row["contact_email"] or ""))
+            contact_email_item.setTextAlignment(Qt.AlignVCenter | Qt.AlignLeft)
+
+            preferred_format_item = QTableWidgetItem(str(row["preferred_format"] or ""))
+            preferred_format_item.setTextAlignment(Qt.AlignCenter)
+
+            self.courses_table.setItem(row_idx, 0, course_item)
+            self.courses_table.setItem(row_idx, 1, address_item)
+            self.courses_table.setItem(row_idx, 2, active_item)
+            self.courses_table.setItem(row_idx, 3, notes_item)
+            self.courses_table.setItem(row_idx, 4, contact_name_item)
+            self.courses_table.setItem(row_idx, 5, contact_email_item)
+            self.courses_table.setItem(row_idx, 6, preferred_format_item)
+
+        self.courses_table.resizeColumnsToContents()
+        self.courses_table.horizontalHeader().setStretchLastSection(True)
 
     def load_outings(self):
         outings = self.outing_service.list_outings()
@@ -347,8 +466,9 @@ class MainWindow(QMainWindow):
     def add_member(self):
         dlg = MemberFormDialog()
         if dlg.exec_():
-            self.member_service.create_member(dlg.values())
+            member_id = self.member_service.create_member(dlg.values())
             self.load_members()
+            self.select_member_row_by_id(member_id)
 
     def edit_member(self):
         member_id = self.selected_row_id(self.members_table)
@@ -386,17 +506,27 @@ class MainWindow(QMainWindow):
                 self, "Member Deleted", "Member deleted successfully."
             )
         except Exception as exc:
-            QMessageBox.critical(
-                self,
-                "Delete Failed",
-                f"Could not delete member.\n\n{exc}",
-            )
+            error_text = str(exc)
+
+            if "FOREIGN KEY constraint failed" in error_text:
+                QMessageBox.critical(
+                    self,
+                    "Delete Failed",
+                    "Member cannot be deleted while participating in a currently scheduled outing.",
+                )
+            else:
+                QMessageBox.critical(
+                    self,
+                    "Delete Failed",
+                    f"Could not delete member.\n\n{exc}",
+                )
 
     def add_course(self):
         dlg = CourseFormDialog()
         if dlg.exec_():
-            self.course_service.create_course(dlg.values())
+            course_id = self.course_service.create_course(dlg.values())
             self.load_courses()
+            self.select_course_row_by_id(course_id)
 
     def edit_course(self):
         course_id = self.selected_row_id(self.courses_table)
@@ -693,4 +823,36 @@ class MainWindow(QMainWindow):
             if hidden_id is not None and int(hidden_id) == int(outing_id):
                 self.outings_table.selectRow(row)
                 self.outings_table.setCurrentCell(row, 0)
+                return
+
+    def select_member_row_by_id(self, member_id: int):
+        for row in range(self.members_table.rowCount()):
+            item = self.members_table.item(row, 0)
+            if not item:
+                continue
+
+            hidden_id = item.data(Qt.UserRole)
+            if hidden_id is not None and int(hidden_id) == int(member_id):
+                self.members_table.selectRow(row)
+                self.members_table.setCurrentCell(row, 0)
+                self.members_table.scrollToItem(
+                    item,
+                    QTableWidget.PositionAtCenter,
+                )
+                return
+
+    def select_course_row_by_id(self, course_id: int):
+        for row in range(self.courses_table.rowCount()):
+            item = self.courses_table.item(row, 0)
+            if not item:
+                continue
+
+            hidden_id = item.data(Qt.UserRole)
+            if hidden_id is not None and int(hidden_id) == int(course_id):
+                self.courses_table.selectRow(row)
+                self.courses_table.setCurrentCell(row, 0)
+                self.courses_table.scrollToItem(
+                    item,
+                    QTableWidget.PositionAtCenter,
+                )
                 return
