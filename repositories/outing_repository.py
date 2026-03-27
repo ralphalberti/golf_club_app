@@ -123,7 +123,10 @@ class OutingRepository(BaseRepository):
                 SELECT
                     tta.id,
                     tta.tee_time_id,
+                    tta.player_order_in_group,
                     tt.tee_time,
+                    tt.position_index,
+                    m.id AS member_id,
                     m.first_name,
                     m.last_name,
                     m.email,
@@ -132,7 +135,7 @@ class OutingRepository(BaseRepository):
                 JOIN tee_times tt ON tt.id = tta.tee_time_id
                 JOIN members m ON m.id = tta.member_id
                 WHERE tt.outing_id = ?
-                ORDER BY tt.position_index, m.last_name, m.first_name
+                ORDER BY tt.position_index, tta.player_order_in_group, m.last_name, m.first_name
                 """,
                 (outing_id,),
             ).fetchall()
