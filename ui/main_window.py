@@ -1,5 +1,5 @@
 from PyQt5.QtCore import Qt, QTimer
-
+from PyQt5.QtGui import QFont, QColor
 from PyQt5.QtWidgets import (
     QAction,
     QFileDialog,
@@ -434,10 +434,15 @@ class MainWindow(QMainWindow):
             ["Tee Time", "First Name", "Last Name", "Email", "Handicap"]
         )
 
+        previous_tee_time = None
+
         for row_idx, row in enumerate(rows):
             self.assignments_table.insertRow(row_idx)
 
-            tee_time_item = QTableWidgetItem(str(row["tee_time"] or ""))
+            current_tee_time = str(row["tee_time"] or "")
+            show_tee_time = current_tee_time != previous_tee_time
+
+            tee_time_item = QTableWidgetItem(current_tee_time if show_tee_time else "")
             tee_time_item.setData(Qt.UserRole, row["id"])  # hidden assignment id
             tee_time_item.setTextAlignment(Qt.AlignCenter)
 
@@ -454,11 +459,27 @@ class MainWindow(QMainWindow):
             handicap_item = QTableWidgetItem(handicap_value)
             handicap_item.setTextAlignment(Qt.AlignCenter)
 
+            items = [
+                tee_time_item,
+                first_name_item,
+                last_name_item,
+                email_item,
+                handicap_item,
+            ]
+
+            # Subtle separator effect: first row has date plus bold font
+            if show_tee_time:
+                font = QFont()
+                font.setBold(True)
+                tee_time_item.setFont(font)
+
             self.assignments_table.setItem(row_idx, 0, tee_time_item)
             self.assignments_table.setItem(row_idx, 1, first_name_item)
             self.assignments_table.setItem(row_idx, 2, last_name_item)
             self.assignments_table.setItem(row_idx, 3, email_item)
             self.assignments_table.setItem(row_idx, 4, handicap_item)
+
+            previous_tee_time = current_tee_time
 
         self.assignments_table.resizeColumnsToContents()
         self.assignments_table.horizontalHeader().setStretchLastSection(True)
