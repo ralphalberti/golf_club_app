@@ -1,14 +1,75 @@
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
+    QAbstractItemView,
     QDialog,
-    QVBoxLayout,
     QHBoxLayout,
     QLabel,
     QListWidget,
     QListWidgetItem,
-    QPushButton,
     QMessageBox,
+    QPushButton,
+    QTreeWidget,
+    QTreeWidgetItem,
+    QVBoxLayout,
 )
+
+
+class AssignmentsTreeWidget(QTreeWidget):
+    def __init__(self, dialog):
+        super().__init__(dialog)
+        self.dialog = dialog
+
+        self.setHeaderLabels(["Tee Time / Player"])
+        self.setDragEnabled(True)
+        self.setAcceptDrops(True)
+        self.viewport().setAcceptDrops(True)
+        self.setDropIndicatorShown(True)
+        self.setDragDropMode(QAbstractItemView.DragDrop)
+        self.setDefaultDropAction(Qt.MoveAction)
+        self.setDragDropOverwriteMode(False)
+        self.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.setRootIsDecorated(False)
+        self.setExpandsOnDoubleClick(False)
+
+    def dropEvent(self, event):
+        dragged_item = self.currentItem()
+        if not dragged_item or dragged_item.parent() is None:
+            event.ignore()
+            return
+
+        target_item = self.itemAt(event.pos())
+        if target_item is None:
+            event.ignore()
+            return
+
+        source_group = dragged_item.parent()
+        target_group = (
+            target_item if target_item.parent() is None else target_item.parent()
+        )
+
+        if target_group is None:
+            event.ignore()
+            return
+
+        max_players = int(target_group.data(0, Qt.UserRole + 1))
+
+        if target_group != source_group and target_group.childCount() >= max_players:
+            QMessageBox.warning(
+                self,
+                "Tee Time Full",
+                "That tee time is full. Remove a player first or move to a tee time with an open slot.",
+            )
+            event.ignore()
+            return
+
+        super().dropEvent(event)
+
+        if not self.dialog.validate_tree_state(show_message=True):
+            self.dialog.load_assignments_tree()
+            return
+
+        self.dialog.persist_tree_structure()
 
 
 class ScheduleEditorDialog(QDialog):
@@ -18,14 +79,16 @@ class ScheduleEditorDialog(QDialog):
         self.outing_service = outing_service
 
         self.setWindowTitle("Edit Schedule")
-        self.resize(1000, 600)
+        self.resize(1000, 650)
 
         self.available_members_list = QListWidget()
-        self.tee_times_list = QListWidget()
-        self.assignments_list = QListWidget()
+        self.available_members_list.setSelectionMode(
+            QAbstractItemView.ExtendedSelection
+        )
+        self.assignments_tree = AssignmentsTreeWidget(self)
 
         self.add_button = QPushButton("Add To Selected Tee Time")
-        self.remove_button = QPushButton("Remove Selected Assignment")
+        self.remove_button = QPushButton("Remove Selected Player")
         self.close_button = QPushButton("Close")
 
         self.add_button.clicked.connect(self.add_selected_member)
@@ -40,16 +103,13 @@ class ScheduleEditorDialog(QDialog):
         left_layout.addWidget(QLabel("Available Members"))
         left_layout.addWidget(self.available_members_list)
 
-        middle_layout = QVBoxLayout()
-        middle_layout.addWidget(QLabel("Tee Times"))
-        middle_layout.addWidget(self.tee_times_list)
-
         right_layout = QVBoxLayout()
-        right_layout.addWidget(QLabel("Current Assignments"))
-        right_layout.addWidget(self.assignments_list)
+        right_layout.addWidget(
+            QLabel("Current Groups (drag players between tee times)")
+        )
+        right_layout.addWidget(self.assignments_tree)
 
         content_layout.addLayout(left_layout, 2)
-        content_layout.addLayout(middle_layout, 1)
         content_layout.addLayout(right_layout, 3)
 
         button_layout.addWidget(self.add_button)
@@ -60,16 +120,11 @@ class ScheduleEditorDialog(QDialog):
         main_layout.addLayout(content_layout)
         main_layout.addLayout(button_layout)
 
-        self.tee_times_list.currentRowChanged.connect(
-            self.load_assignments_for_selected_tee_time
-        )
-
         self.load_data()
 
     def load_data(self):
         self.load_available_members()
-        self.load_tee_times()
-        self.load_all_assignments()
+        self.load_assignments_tree()
 
     def load_available_members(self):
         self.available_members_list.clear()
@@ -78,91 +133,196 @@ class ScheduleEditorDialog(QDialog):
         for row in members:
             text = f"{row['first_name']} {row['last_name']}"
             item = QListWidgetItem(text)
-            item.setData(Qt.UserRole, row["id"])
+            item.setData(Qt.UserRole, int(row["id"]))
             self.available_members_list.addItem(item)
 
-    def load_tee_times(self):
-        self.tee_times_list.clear()
+    def load_assignments_tree(self):
+        self.assignments_tree.clear()
+
         tee_times = self.outing_service.get_tee_times(self.outing_id)
-
-        for row in tee_times:
-            label = f"{row['tee_time']} (max {row['max_players']})"
-            item = QListWidgetItem(label)
-            item.setData(Qt.UserRole, row["id"])
-            self.tee_times_list.addItem(item)
-
-        if self.tee_times_list.count() > 0:
-            self.tee_times_list.setCurrentRow(0)
-
-    def load_all_assignments(self):
-        self.assignments_list.clear()
         rows = self.outing_service.get_assignments(self.outing_id)
 
+        assignments_by_tee_time = {}
         for row in rows:
-            text = f"{row['tee_time']} - {row['first_name']} {row['last_name']}"
-            item = QListWidgetItem(text)
-            item.setData(Qt.UserRole, row["id"])  # assignment id
-            item.setData(Qt.UserRole + 1, row["tee_time_id"])  # tee time id
-            self.assignments_list.addItem(item)
+            tee_time_id = int(row["tee_time_id"])
+            assignments_by_tee_time.setdefault(tee_time_id, []).append(row)
 
-    def load_assignments_for_selected_tee_time(self):
-        selected_item = self.tee_times_list.currentItem()
-        if not selected_item:
-            self.assignments_list.clear()
-            return
+        for tee_time in tee_times:
+            tee_time_id = int(tee_time["id"])
+            tee_time_text = str(tee_time["tee_time"])
+            max_players = int(tee_time["max_players"])
 
-        selected_tee_time_id = selected_item.data(Qt.UserRole)
+            group_item = QTreeWidgetItem()
+            group_item.setData(0, Qt.UserRole, tee_time_id)
+            group_item.setData(0, Qt.UserRole + 1, max_players)
+            group_item.setData(0, Qt.UserRole + 2, tee_time_text)
+            group_item.setFlags(
+                Qt.ItemIsEnabled | Qt.ItemIsSelectable | Qt.ItemIsDropEnabled
+            )
 
-        self.assignments_list.clear()
-        rows = self.outing_service.get_assignments(self.outing_id)
+            self.assignments_tree.addTopLevelItem(group_item)
 
-        for row in rows:
-            if int(row["tee_time_id"]) != int(selected_tee_time_id):
-                continue
+            for row in assignments_by_tee_time.get(tee_time_id, []):
+                child = QTreeWidgetItem([f"{row['first_name']} {row['last_name']}"])
+                child.setData(0, Qt.UserRole, int(row["id"]))  # assignment id
+                child.setData(0, Qt.UserRole + 1, int(row["member_id"]))  # member id
+                child.setFlags(
+                    Qt.ItemIsEnabled | Qt.ItemIsSelectable | Qt.ItemIsDragEnabled
+                )
+                group_item.addChild(child)
 
-            text = f"{row['first_name']} {row['last_name']}"
-            item = QListWidgetItem(text)
-            item.setData(Qt.UserRole, row["id"])  # assignment id
-            item.setData(Qt.UserRole + 1, row["tee_time_id"])  # tee time id
-            self.assignments_list.addItem(item)
+            self.update_group_label(group_item)
 
-    def add_selected_member(self):
-        member_item = self.available_members_list.currentItem()
-        tee_time_item = self.tee_times_list.currentItem()
+        self.assignments_tree.expandAll()
 
-        if not member_item:
-            QMessageBox.warning(self, "No Member Selected", "Select a member to add.")
-            return
+    def update_group_label(self, group_item):
+        tee_time_text = group_item.data(0, Qt.UserRole + 2)
+        max_players = int(group_item.data(0, Qt.UserRole + 1))
+        current_players = group_item.childCount()
+        group_item.setText(0, f"{tee_time_text} ({current_players}/{max_players})")
 
-        if not tee_time_item:
-            QMessageBox.warning(self, "No Tee Time Selected", "Select a tee time.")
-            return
+    def get_selected_group_item(self):
+        current_item = self.assignments_tree.currentItem()
+        if not current_item:
+            return None
 
-        member_id = member_item.data(Qt.UserRole)
-        tee_time_id = tee_time_item.data(Qt.UserRole)
+        if current_item.parent() is None:
+            return current_item
+
+        return current_item.parent()
+
+    def validate_tree_state(self, show_message=False):
+        seen_member_ids = set()
+
+        for i in range(self.assignments_tree.topLevelItemCount()):
+            group_item = self.assignments_tree.topLevelItem(i)
+            max_players = int(group_item.data(0, Qt.UserRole + 1))
+
+            if group_item.childCount() > max_players:
+                if show_message:
+                    QMessageBox.warning(
+                        self,
+                        "Too Many Players",
+                        "A tee time has more players than allowed.",
+                    )
+                return False
+
+            for j in range(group_item.childCount()):
+                child = group_item.child(j)
+                member_id = int(child.data(0, Qt.UserRole + 1))
+                if member_id in seen_member_ids:
+                    if show_message:
+                        QMessageBox.warning(
+                            self,
+                            "Duplicate Player",
+                            "The same player appears more than once in the outing.",
+                        )
+                    return False
+                seen_member_ids.add(member_id)
+
+        return True
+
+    def persist_tree_structure(self):
+        grouped_member_ids = []
+
+        for i in range(self.assignments_tree.topLevelItemCount()):
+            group_item = self.assignments_tree.topLevelItem(i)
+            member_ids = []
+
+            for j in range(group_item.childCount()):
+                child = group_item.child(j)
+                member_ids.append(int(child.data(0, Qt.UserRole + 1)))
+
+            grouped_member_ids.append(member_ids)
 
         try:
-            self.outing_service.add_member_to_tee_time(
-                outing_id=self.outing_id,
-                tee_time_id=tee_time_id,
-                member_id=member_id,
-            )
+            self.outing_service.replace_assignments(self.outing_id, grouped_member_ids)
             self.load_available_members()
-            self.load_assignments_for_selected_tee_time()
+            self.load_assignments_tree()
         except Exception as exc:
-            QMessageBox.critical(self, "Add Failed", str(exc))
+            QMessageBox.critical(
+                self,
+                "Save Failed",
+                f"Could not save the updated schedule.\n\n{exc}",
+            )
+            self.load_assignments_tree()
 
-    def remove_selected_assignment(self):
-        assignment_item = self.assignments_list.currentItem()
-        if not assignment_item:
+    def add_selected_member(self):
+        member_items = self.available_members_list.selectedItems()
+        group_item = self.get_selected_group_item()
+
+        if not member_items:
+            QMessageBox.warning(
+                self, "No Member Selected", "Select one or more members to add."
+            )
+            return
+
+        if not group_item:
             QMessageBox.warning(
                 self,
-                "No Assignment Selected",
+                "No Tee Time Selected",
+                "Select a tee time group on the right.",
+            )
+            return
+
+        max_players = int(group_item.data(0, Qt.UserRole + 1))
+        available_slots = max_players - group_item.childCount()
+
+        if available_slots <= 0:
+            QMessageBox.warning(
+                self,
+                "Tee Time Full",
+                "That tee time is already full.",
+            )
+            return
+
+        selected_tee_time_id = int(group_item.data(0, Qt.UserRole))
+        member_ids_to_add = []
+        member_names_to_add = []
+
+        for item in member_items[:available_slots]:
+            member_ids_to_add.append(int(item.data(Qt.UserRole)))
+            member_names_to_add.append(item.text())
+
+        if len(member_items) > available_slots:
+            QMessageBox.information(
+                self,
+                "Tee Time Full",
+                f"Only {available_slots} player(s) could be added because that tee time does not have enough open slots.",
+            )
+
+        for member_id, member_name in zip(member_ids_to_add, member_names_to_add):
+            child = QTreeWidgetItem([member_name])
+            child.setData(0, Qt.UserRole, -1)  # temp assignment id
+            child.setData(0, Qt.UserRole + 1, member_id)  # member id
+            child.setFlags(
+                Qt.ItemIsEnabled | Qt.ItemIsSelectable | Qt.ItemIsDragEnabled
+            )
+            group_item.addChild(child)
+
+        self.update_group_label(group_item)
+
+        if not self.validate_tree_state(show_message=True):
+            self.load_assignments_tree()
+            return
+
+        self.persist_tree_structure()
+
+        # Re-select the same tee time after reload
+        self.select_group_by_tee_time_id(selected_tee_time_id)
+
+    def remove_selected_assignment(self):
+        current_item = self.assignments_tree.currentItem()
+        if not current_item or current_item.parent() is None:
+            QMessageBox.warning(
+                self,
+                "No Player Selected",
                 "Select an assigned player to remove.",
             )
             return
 
-        assignment_id = assignment_item.data(Qt.UserRole)
+        parent = current_item.parent()
+        selected_tee_time_id = int(parent.data(0, Qt.UserRole))
 
         confirm = QMessageBox.question(
             self,
@@ -174,9 +334,21 @@ class ScheduleEditorDialog(QDialog):
         if confirm != QMessageBox.Yes:
             return
 
-        try:
-            self.outing_service.remove_assignment(assignment_id)
-            self.load_available_members()
-            self.load_assignments_for_selected_tee_time()
-        except Exception as exc:
-            QMessageBox.critical(self, "Remove Failed", str(exc))
+        parent.removeChild(current_item)
+        self.update_group_label(parent)
+
+        if not self.validate_tree_state(show_message=True):
+            self.load_assignments_tree()
+            return
+
+        self.persist_tree_structure()
+        self.select_group_by_tee_time_id(selected_tee_time_id)
+
+    def select_group_by_tee_time_id(self, tee_time_id: int):
+        for i in range(self.assignments_tree.topLevelItemCount()):
+            group_item = self.assignments_tree.topLevelItem(i)
+            current_id = group_item.data(0, Qt.UserRole)
+            if current_id is not None and int(current_id) == int(tee_time_id):
+                self.assignments_tree.setCurrentItem(group_item)
+                self.assignments_tree.scrollToItem(group_item)
+                return
