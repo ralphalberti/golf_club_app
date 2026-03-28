@@ -15,8 +15,20 @@ class MemberRepository(BaseRepository):
             cur = conn.execute(
                 """
                 INSERT INTO members
-                (first_name, last_name, email, phone, handicap, joined_date, active, notes, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (
+                    first_name,
+                    last_name,
+                    email,
+                    phone,
+                    handicap,
+                    skill_tier,
+                    joined_date,
+                    active,
+                    notes,
+                    created_at,
+                    updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     data["first_name"],
@@ -24,6 +36,7 @@ class MemberRepository(BaseRepository):
                     data.get("email", ""),
                     data.get("phone", ""),
                     data.get("handicap"),
+                    data.get("skill_tier"),
                     data["joined_date"],
                     data.get("active", 1),
                     data.get("notes", ""),
@@ -38,7 +51,16 @@ class MemberRepository(BaseRepository):
             conn.execute(
                 """
                 UPDATE members
-                SET first_name=?, last_name=?, email=?, phone=?, handicap=?, joined_date=?, active=?, notes=?, updated_at=?
+                SET first_name=?,
+                    last_name=?,
+                    email=?,
+                    phone=?,
+                    handicap=?,
+                    skill_tier=?,
+                    joined_date=?,
+                    active=?,
+                    notes=?,
+                    updated_at=?
                 WHERE id=?
                 """,
                 (
@@ -47,6 +69,7 @@ class MemberRepository(BaseRepository):
                     data.get("email", ""),
                     data.get("phone", ""),
                     data.get("handicap"),
+                    data.get("skill_tier"),
                     data["joined_date"],
                     data.get("active", 1),
                     data.get("notes", ""),

@@ -32,6 +32,17 @@ class MemberFormDialog(QDialog):
             handicap_value = float(member["handicap"])
         self.handicap.setValue(handicap_value)
 
+        self.skill_tier = QComboBox()
+        self.skill_tier.addItem("", None)
+        self.skill_tier.addItem("Tier I", 1)
+        self.skill_tier.addItem("Tier II", 2)
+        self.skill_tier.addItem("Tier III", 3)
+
+        if member and member["skill_tier"] is not None:
+            idx = self.skill_tier.findData(int(member["skill_tier"]))
+            if idx >= 0:
+                self.skill_tier.setCurrentIndex(idx)
+
         self.joined_date = QDateEdit()
         self.joined_date.setCalendarPopup(True)
         if member and member["joined_date"]:
@@ -48,6 +59,7 @@ class MemberFormDialog(QDialog):
         form.addRow("Email", self.email)
         form.addRow("Phone", self.phone)
         form.addRow("Handicap", self.handicap)
+        form.addRow("Skill Tier", self.skill_tier)
         form.addRow("Joined date", self.joined_date)
         form.addRow("Notes", self.notes)
 
@@ -82,6 +94,7 @@ class MemberFormDialog(QDialog):
             "email": self.email.text().strip().lower(),
             "phone": self.phone.text().strip(),
             "handicap": handicap,
+            "skill_tier": self.skill_tier.currentData(),
             "joined_date": self.joined_date.date().toString("yyyy-MM-dd"),
             "notes": self.notes.toPlainText().strip(),
             "active": 1,

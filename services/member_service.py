@@ -1,7 +1,5 @@
 import csv
 from datetime import datetime
-from repositories.member_repository import MemberRepository
-from repositories.reporting_repository import ReportingRepository
 
 
 class MemberService:
@@ -51,6 +49,7 @@ class MemberService:
                     email = (row.get("email") or "").strip().lower()
                     phone = (row.get("phone") or "").strip()
                     handicap_raw = (row.get("handicap") or "").strip()
+                    skill_tier_raw = (row.get("skill_tier") or "").strip()
                     joined_date = (row.get("joined_date") or "").strip()
                     active_raw = (row.get("active") or "1").strip()
                     notes = (row.get("notes") or "").strip()
@@ -70,6 +69,18 @@ class MemberService:
                         except ValueError:
                             raise ValueError(f"invalid handicap: {handicap_raw}")
 
+                    skill_tier = None
+                    if skill_tier_raw:
+                        try:
+                            skill_tier = int(skill_tier_raw)
+                        except ValueError:
+                            raise ValueError(f"invalid skill_tier: {skill_tier_raw}")
+
+                        if skill_tier not in {1, 2, 3}:
+                            raise ValueError(
+                                f"skill_tier must be 1, 2, or 3: {skill_tier_raw}"
+                            )
+
                     active = (
                         1
                         if active_raw not in {"0", "false", "False", "no", "NO"}
@@ -85,6 +96,7 @@ class MemberService:
                             "email": email,
                             "phone": phone,
                             "handicap": handicap,
+                            "skill_tier": skill_tier,
                             "joined_date": joined_date or existing["joined_date"],
                             "active": active,
                             "notes": notes,
@@ -98,6 +110,7 @@ class MemberService:
                             "email": email,
                             "phone": phone,
                             "handicap": handicap,
+                            "skill_tier": skill_tier,
                             "joined_date": joined_date or today_str,
                             "active": active,
                             "notes": notes,
