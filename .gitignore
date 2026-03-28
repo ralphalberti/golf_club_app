@@ -18,7 +18,7 @@ htmlcov/
 
 # Local database / runtime files
 # DB
-data/*.db
+data/
 *.db
 *.sqlite
 *.sqlite3
