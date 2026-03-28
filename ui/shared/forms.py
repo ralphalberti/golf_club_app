@@ -7,6 +7,7 @@ from PyQt5.QtWidgets import (
     QSpinBox,
     QDoubleSpinBox,
     QComboBox,
+    QCheckBox,
     QDateEdit,
     QMessageBox,
 )
@@ -51,6 +52,9 @@ class MemberFormDialog(QDialog):
         else:
             self.joined_date.setDate(QDate.currentDate())
 
+        self.active = QCheckBox()
+        self.active.setChecked(True if not member else bool(member["active"]))
+
         self.notes = QTextEdit(member["notes"] if member else "")
 
         form = QFormLayout(self)
@@ -61,6 +65,7 @@ class MemberFormDialog(QDialog):
         form.addRow("Handicap", self.handicap)
         form.addRow("Skill Tier", self.skill_tier)
         form.addRow("Joined date", self.joined_date)
+        form.addRow("Active", self.active)
         form.addRow("Notes", self.notes)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
@@ -96,8 +101,8 @@ class MemberFormDialog(QDialog):
             "handicap": handicap,
             "skill_tier": self.skill_tier.currentData(),
             "joined_date": self.joined_date.date().toString("yyyy-MM-dd"),
+            "active": 1 if self.active.isChecked() else 0,
             "notes": self.notes.toPlainText().strip(),
-            "active": 1,
         }
 
 
