@@ -241,7 +241,7 @@ class MainWindow(QMainWindow):
 
         self.members_table.clear()
         self.members_table.setRowCount(0)
-        self.members_table.setColumnCount(8)
+        self.members_table.setColumnCount(9)
         self.members_table.setHorizontalHeaderLabels(
             [
                 "First Name",
@@ -249,11 +249,18 @@ class MainWindow(QMainWindow):
                 "Email",
                 "Phone",
                 "Handicap",
+                "Skill Tier",
                 "Joined",
                 "Active",
                 "Notes",
             ]
         )
+
+        tier_map = {
+            1: "Tier I",
+            2: "Tier II",
+            3: "Tier III",
+        }
 
         for row_idx, row in enumerate(rows):
             self.members_table.insertRow(row_idx)
@@ -275,6 +282,11 @@ class MainWindow(QMainWindow):
             handicap_item = QTableWidgetItem(handicap_value)
             handicap_item.setTextAlignment(Qt.AlignCenter)
 
+            skill_tier_value = row["skill_tier"]
+            skill_tier_text = tier_map.get(skill_tier_value, "")
+            skill_tier_item = QTableWidgetItem(skill_tier_text)
+            skill_tier_item.setTextAlignment(Qt.AlignCenter)
+
             joined_item = QTableWidgetItem(str(row["joined_date"] or ""))
             joined_item.setTextAlignment(Qt.AlignCenter)
 
@@ -290,9 +302,10 @@ class MainWindow(QMainWindow):
             self.members_table.setItem(row_idx, 2, email_item)
             self.members_table.setItem(row_idx, 3, phone_item)
             self.members_table.setItem(row_idx, 4, handicap_item)
-            self.members_table.setItem(row_idx, 5, joined_item)
-            self.members_table.setItem(row_idx, 6, active_item)
-            self.members_table.setItem(row_idx, 7, notes_item)
+            self.members_table.setItem(row_idx, 5, skill_tier_item)
+            self.members_table.setItem(row_idx, 6, joined_item)
+            self.members_table.setItem(row_idx, 7, active_item)
+            self.members_table.setItem(row_idx, 8, notes_item)
 
         self.members_table.resizeColumnsToContents()
         self.members_table.horizontalHeader().setStretchLastSection(True)
