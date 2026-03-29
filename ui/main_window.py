@@ -237,7 +237,7 @@ class MainWindow(QMainWindow):
         return None
 
     def load_members(self):
-        rows = self.member_service.list_members()
+        rows = self.member_service.list_members(active_only=False)
 
         self.members_table.clear()
         self.members_table.setRowCount(0)
@@ -674,7 +674,7 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "No outing selected", "Select an outing first.")
             return
 
-        members = self.member_service.list_members()
+        members = self.member_service.list_members(active_only=True)
         dlg = OutingAssignmentDialog(members, self)
         if not dlg.exec_():
             return

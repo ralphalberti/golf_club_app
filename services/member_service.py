@@ -7,8 +7,8 @@ class MemberService:
         self.member_repository = member_repository
         self.reporting_repo = reporting_repository
 
-    def list_members(self):
-        return self.member_repository.list_all()
+    def list_members(self, active_only: bool = True):
+        return self.member_repository.list_all(active_only=active_only)
 
     def create_member(self, data: dict) -> int:
         return self.member_repository.create(data)

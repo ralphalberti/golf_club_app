@@ -3,11 +3,21 @@ from app.utils import now_iso
 
 
 class MemberRepository(BaseRepository):
-    def list_all(self):
+    def list_all(self, active_only: bool = True):
         with self.db.get_conn() as conn:
-            return conn.execute(
-                "SELECT * FROM members ORDER BY last_name, first_name"
-            ).fetchall()
+            if active_only:
+                return conn.execute("""
+                    SELECT *
+                    FROM members
+                    WHERE active = 1
+                    ORDER BY last_name, first_name
+                    """).fetchall()
+
+            return conn.execute("""
+                SELECT *
+                FROM members
+                ORDER BY last_name, first_name
+                """).fetchall()
 
     def create(self, data: dict) -> int:
         now = now_iso()
