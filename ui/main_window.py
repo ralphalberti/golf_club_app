@@ -19,6 +19,7 @@ from app.config import APP_NAME
 from app.constants import APP_VERSION
 from ui.outing_assignment_dialog import OutingAssignmentDialog
 from ui.schedule_editor_dialog import ScheduleEditorDialog
+from ui.settings_dialog import SettingsDialog
 from ui.shared.forms import MemberFormDialog, CourseFormDialog, OutingFormDialog
 
 
@@ -32,6 +33,7 @@ class MainWindow(QMainWindow):
         reporting_service,
         scheduling_service,
         distribution_service,
+        settings_service,
     ):
         super().__init__()
 
@@ -43,6 +45,7 @@ class MainWindow(QMainWindow):
         self.reporting_service = reporting_service
         self.scheduling_service = scheduling_service
         self.distribution_service = distribution_service
+        self.settings_service = settings_service
 
         # Window setup
         self.setWindowTitle(APP_NAME)
@@ -91,6 +94,7 @@ class MainWindow(QMainWindow):
         menu_bar = self.menuBar()
 
         file_menu = menu_bar.addMenu("File")
+        tools_menu = menu_bar.addMenu("Tools")
         help_menu = menu_bar.addMenu("Help")
 
         import_members_action = QAction("Import Member CSV", self)
@@ -103,9 +107,17 @@ class MainWindow(QMainWindow):
         quit_action.triggered.connect(self.close)
         file_menu.addAction(quit_action)
 
+        settings_action = QAction("Settings", self)
+        settings_action.triggered.connect(self.open_settings_dialog)
+        tools_menu.addAction(settings_action)
+
         about_action = QAction("About", self)
         about_action.triggered.connect(self.show_about_dialog)
         help_menu.addAction(about_action)
+
+    def open_settings_dialog(self):
+        dlg = SettingsDialog(self.settings_service, self)
+        dlg.exec_()
 
     def _build_members_tab(self):
         widget = QWidget()
@@ -266,7 +278,7 @@ class MainWindow(QMainWindow):
             self.members_table.insertRow(row_idx)
 
             first_name_item = QTableWidgetItem(str(row["first_name"] or ""))
-            first_name_item.setData(Qt.UserRole, row["id"])  # hidden member id
+            first_name_item.setData(Qt.UserRole, row["id"])
             first_name_item.setTextAlignment(Qt.AlignVCenter | Qt.AlignLeft)
 
             last_name_item = QTableWidgetItem(str(row["last_name"] or ""))
@@ -332,7 +344,7 @@ class MainWindow(QMainWindow):
             self.courses_table.insertRow(row_idx)
 
             course_item = QTableWidgetItem(str(row["name"] or ""))
-            course_item.setData(Qt.UserRole, row["id"])  # hidden course id
+            course_item.setData(Qt.UserRole, row["id"])
             course_item.setTextAlignment(Qt.AlignVCenter | Qt.AlignLeft)
 
             address_item = QTableWidgetItem(str(row["address"] or ""))
@@ -432,8 +444,6 @@ class MainWindow(QMainWindow):
             self.outings_table.setItem(row_idx, 4, notes_item)
 
         self._resize_outings_table_columns()
-
-        # Run once more after Qt finishes laying out the table
         QTimer.singleShot(0, self._resize_outings_table_columns)
 
     def refresh_assignments(self):
@@ -456,7 +466,7 @@ class MainWindow(QMainWindow):
             show_tee_time = current_tee_time != previous_tee_time
 
             tee_time_item = QTableWidgetItem(current_tee_time if show_tee_time else "")
-            tee_time_item.setData(Qt.UserRole, row["id"])  # hidden assignment id
+            tee_time_item.setData(Qt.UserRole, row["id"])
             tee_time_item.setTextAlignment(Qt.AlignCenter)
 
             first_name_item = QTableWidgetItem(str(row["first_name"] or ""))
@@ -472,15 +482,6 @@ class MainWindow(QMainWindow):
             handicap_item = QTableWidgetItem(handicap_value)
             handicap_item.setTextAlignment(Qt.AlignCenter)
 
-            items = [
-                tee_time_item,
-                first_name_item,
-                last_name_item,
-                email_item,
-                handicap_item,
-            ]
-
-            # Subtle separator effect: first row has date plus bold font
             if show_tee_time:
                 font = QFont()
                 font.setBold(True)
@@ -685,7 +686,6 @@ class MainWindow(QMainWindow):
             return
 
         self.scheduling_service.generate_schedule(outing_id, member_ids)
-        self.outing_service.increment_version(outing_id)
 
         self.load_outings()
         self.select_outing_row_by_id(outing_id)
@@ -832,18 +832,17 @@ class MainWindow(QMainWindow):
         header = table.horizontalHeader()
         header.setSectionResizeMode(QHeaderView.Fixed)
 
-        table.setColumnWidth(0, other_width)  # Outing Date
-        table.setColumnWidth(1, other_width)  # Course
-        table.setColumnWidth(2, other_width)  # Start Time
-        table.setColumnWidth(3, other_width)  # Status
-        table.setColumnWidth(4, notes_width)  # Notes
+        table.setColumnWidth(0, other_width)
+        table.setColumnWidth(1, other_width)
+        table.setColumnWidth(2, other_width)
+        table.setColumnWidth(3, other_width)
+        table.setColumnWidth(4, notes_width)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self._resize_outings_table_columns()
 
     def _on_tab_changed(self, index):
-        # Assuming outings tab is index 2
         if index == 2:
             QTimer.singleShot(0, self._resize_outings_table_columns)
 

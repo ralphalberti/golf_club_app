@@ -447,32 +447,14 @@ class ScheduleEditorDialog(QDialog):
         self.persist_tree_structure()
         self.select_group_by_tee_time_id(selected_tee_time_id)
 
-    # def handle_reshuffle(self):
-    #     try:
-    #         self.outing_service.reshuffle_schedule(self.outing_id)
-    #         self.load_available_members()
-    #         self.load_assignments_tree()
-    #         QMessageBox.information(
-    #             self,
-    #             "Schedule Reshuffled",
-    #             "The outing schedule was reshuffled successfully.",
-    #         )
-    #     except Exception as exc:
-    #         QMessageBox.warning(
-    #             self,
-    #             "Reshuffle Failed",
-    #             f"Could not reshuffle the schedule.\n\n{exc}",
-    #         )
-
-
-def handle_reshuffle(self):
-    try:
-        self.outing_service.reshuffle_schedule(self.outing_id)
-        self.load_available_members()
-        self.load_assignments_tree()
-    except Exception as exc:
-        QMessageBox.warning(
-            self,
-            "Reshuffle Failed",
-            f"Could not reshuffle the schedule.\n\n{exc}",
-        )
+    def handle_reshuffle(self):
+        try:
+            self.outing_service.reshuffle_schedule(self.outing_id)
+            self.load_available_members()
+            self.load_assignments_tree()
+        except Exception as exc:
+            QMessageBox.warning(
+                self,
+                "Reshuffle Failed",
+                f"Could not reshuffle the schedule.\n\n{exc}",
+            )

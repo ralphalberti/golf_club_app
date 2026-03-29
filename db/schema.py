@@ -12,6 +12,10 @@ CREATE TABLE IF NOT EXISTS app_settings (
     smtp_password TEXT,
     smtp_from_name TEXT,
     smtp_from_email TEXT,
+    scheduler_algorithm TEXT NOT NULL DEFAULT 'balanced',
+    reshuffle_mode TEXT NOT NULL DEFAULT 'moderate',
+    show_tier_colors INTEGER NOT NULL DEFAULT 1,
+    show_tier_summary INTEGER NOT NULL DEFAULT 1,
     updated_at TEXT NOT NULL
 );
 
@@ -160,3 +164,32 @@ CREATE TABLE IF NOT EXISTS audit_log (
 def create_schema(db: Database) -> None:
     with db.get_conn() as conn:
         conn.executescript(SCHEMA_SQL)
+
+        existing_columns = {
+            row["name"]
+            for row in conn.execute("PRAGMA table_info(app_settings)").fetchall()
+        }
+
+        if "scheduler_algorithm" not in existing_columns:
+            conn.execute("""
+                ALTER TABLE app_settings
+                ADD COLUMN scheduler_algorithm TEXT NOT NULL DEFAULT 'balanced'
+                """)
+
+        if "reshuffle_mode" not in existing_columns:
+            conn.execute("""
+                ALTER TABLE app_settings
+                ADD COLUMN reshuffle_mode TEXT NOT NULL DEFAULT 'moderate'
+                """)
+
+        if "show_tier_colors" not in existing_columns:
+            conn.execute("""
+                ALTER TABLE app_settings
+                ADD COLUMN show_tier_colors INTEGER NOT NULL DEFAULT 1
+                """)
+
+        if "show_tier_summary" not in existing_columns:
+            conn.execute("""
+                ALTER TABLE app_settings
+                ADD COLUMN show_tier_summary INTEGER NOT NULL DEFAULT 1
+                """)

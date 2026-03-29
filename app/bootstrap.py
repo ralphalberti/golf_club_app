@@ -16,6 +16,7 @@ from services.course_service import CourseService
 from services.outing_service import OutingService
 from services.reporting_service import ReportingService
 from services.scheduling_service import SchedulingService
+from services.settings_service import SettingsService
 from services.export_service import ExportService
 from services.pdf_service import PdfService
 from services.email_service import EmailService
@@ -43,6 +44,7 @@ def bootstrap_and_run() -> None:
     outing_service = OutingService(db)
     reporting_service = ReportingService(db)
     scheduling_service = SchedulingService(db)
+    settings_service = SettingsService(db)
     pdf_service = PdfService()
     export_service = ExportService()
     email_service = EmailService(db)
@@ -69,6 +71,7 @@ def bootstrap_and_run() -> None:
         reporting_service=reporting_service,
         scheduling_service=scheduling_service,
         distribution_service=distribution_service,
+        settings_service=settings_service,
     )
     window.show()
     sys.exit(app.exec_())
