@@ -90,10 +90,12 @@ class ScheduleEditorDialog(QDialog):
         self.add_button = QPushButton("Add Selected Player(s)")
         self.remove_button = QPushButton("Remove Selected Player(s)")
         self.close_button = QPushButton("Close")
+        self.reshuffle_button = QPushButton("Reshuffle Schedule")
 
         self.add_button.clicked.connect(self.add_selected_member)
         self.remove_button.clicked.connect(self.remove_selected_assignment)
         self.close_button.clicked.connect(self.accept)
+        self.reshuffle_button.clicked.connect(self.handle_reshuffle)
 
         self.available_members_list.itemDoubleClicked.connect(
             self.add_double_clicked_member
@@ -121,6 +123,7 @@ class ScheduleEditorDialog(QDialog):
 
         button_layout.addWidget(self.add_button)
         button_layout.addWidget(self.remove_button)
+        button_layout.addWidget(self.reshuffle_button)
         button_layout.addStretch()
         button_layout.addWidget(self.close_button)
 
@@ -443,3 +446,33 @@ class ScheduleEditorDialog(QDialog):
 
         self.persist_tree_structure()
         self.select_group_by_tee_time_id(selected_tee_time_id)
+
+    # def handle_reshuffle(self):
+    #     try:
+    #         self.outing_service.reshuffle_schedule(self.outing_id)
+    #         self.load_available_members()
+    #         self.load_assignments_tree()
+    #         QMessageBox.information(
+    #             self,
+    #             "Schedule Reshuffled",
+    #             "The outing schedule was reshuffled successfully.",
+    #         )
+    #     except Exception as exc:
+    #         QMessageBox.warning(
+    #             self,
+    #             "Reshuffle Failed",
+    #             f"Could not reshuffle the schedule.\n\n{exc}",
+    #         )
+
+
+def handle_reshuffle(self):
+    try:
+        self.outing_service.reshuffle_schedule(self.outing_id)
+        self.load_available_members()
+        self.load_assignments_tree()
+    except Exception as exc:
+        QMessageBox.warning(
+            self,
+            "Reshuffle Failed",
+            f"Could not reshuffle the schedule.\n\n{exc}",
+        )

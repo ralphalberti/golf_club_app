@@ -108,3 +108,29 @@ class MemberRepository(BaseRepository):
                 "DELETE FROM members WHERE id=?",
                 (member_id,),
             )
+
+    def get_by_ids(self, member_ids: list[int]):
+        normalized_ids = []
+        seen = set()
+
+        for member_id in member_ids:
+            member_id = int(member_id)
+            if member_id not in seen:
+                seen.add(member_id)
+                normalized_ids.append(member_id)
+
+        if not normalized_ids:
+            return []
+
+        placeholders = ",".join("?" for _ in normalized_ids)
+
+        with self.db.get_conn() as conn:
+            return conn.execute(
+                f"""
+                SELECT *
+                FROM members
+                WHERE id IN ({placeholders})
+                ORDER BY last_name, first_name
+                """,
+                tuple(normalized_ids),
+            ).fetchall()

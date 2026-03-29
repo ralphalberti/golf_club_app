@@ -1,9 +1,11 @@
 from repositories.outing_repository import OutingRepository
+from services.scheduling_service import SchedulingService
 
 
 class OutingService:
     def __init__(self, db):
         self.repo = OutingRepository(db)
+        self.scheduling_service = SchedulingService(db)
 
     def list_outings(self):
         return self.repo.list_all()
@@ -69,3 +71,6 @@ class OutingService:
             member_id=member_id,
             player_order_in_group=player_order_in_group,
         )
+
+    def reshuffle_schedule(self, outing_id: int):
+        return self.scheduling_service.reshuffle_schedule(outing_id)
