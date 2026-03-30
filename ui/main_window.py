@@ -685,18 +685,25 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "No players", "Select at least one player.")
             return
 
-        self.scheduling_service.generate_schedule(outing_id, member_ids)
+        try:
+            self.scheduling_service.generate_schedule(outing_id, member_ids)
 
-        self.load_outings()
-        self.select_outing_row_by_id(outing_id)
-        self.refresh_assignments()
-        self.assignments_table.setFocus()
+            self.load_outings()
+            self.select_outing_row_by_id(outing_id)
+            self.refresh_assignments()
+            self.assignments_table.setFocus()
 
-        QMessageBox.information(
-            self,
-            "Schedule generated",
-            "The outing schedule has been generated.",
-        )
+            QMessageBox.information(
+                self,
+                "Schedule generated",
+                "The outing schedule has been generated.",
+            )
+        except Exception as exc:
+            QMessageBox.warning(
+                self,
+                "Generate Schedule Failed",
+                f"Could not generate the schedule.\n\n{exc}",
+            )
 
     def edit_schedule(self):
         outing_id = self.selected_row_id(self.outings_table)
@@ -707,6 +714,7 @@ class MainWindow(QMainWindow):
         dlg = ScheduleEditorDialog(
             outing_id=outing_id,
             outing_service=self.outing_service,
+            settings_service=self.settings_service,
             parent=self,
         )
         dlg.exec_()

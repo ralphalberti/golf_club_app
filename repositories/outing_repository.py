@@ -130,7 +130,8 @@ class OutingRepository(BaseRepository):
                     m.first_name,
                     m.last_name,
                     m.email,
-                    m.handicap
+                    m.handicap,
+                    m.skill_tier
                 FROM tee_time_assignments tta
                 JOIN tee_times tt ON tt.id = tta.tee_time_id
                 JOIN members m ON m.id = tta.member_id

@@ -1,5 +1,6 @@
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
+    QAbstractItemView,
     QDialog,
     QVBoxLayout,
     QHBoxLayout,
@@ -31,6 +32,9 @@ class OutingAssignmentDialog(QDialog):
         self.available_list = QListWidget()
         self.selected_list = QListWidget()
 
+        self.available_list.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        self.selected_list.setSelectionMode(QAbstractItemView.ExtendedSelection)
+
         self.add_button = QPushButton("Add →")
         self.remove_button = QPushButton("← Remove")
         self.select_all_button = QPushButton("Select All Visible")
@@ -45,6 +49,9 @@ class OutingAssignmentDialog(QDialog):
         self.ok_button.clicked.connect(self.accept_with_validation)
         self.cancel_button.clicked.connect(self.reject)
         self.search_edit.textChanged.connect(self.refresh_available_members)
+
+        self.available_list.itemDoubleClicked.connect(self.add_double_clicked_member)
+        self.selected_list.itemDoubleClicked.connect(self.remove_double_clicked_member)
 
         main_layout = QVBoxLayout(self)
 
@@ -174,21 +181,30 @@ class OutingAssignmentDialog(QDialog):
 
         capacity = self._get_capacity()
         current_selected = len(self.selected_member_ids_set)
+        added_count = 0
 
         for item in items:
             member_id = int(item.data(Qt.UserRole))
 
             if capacity is not None and current_selected >= capacity:
-                QMessageBox.warning(
-                    self,
-                    "Capacity Reached",
-                    f"You cannot select more than {capacity} players for this outing.",
-                )
+                if added_count == 0:
+                    QMessageBox.warning(
+                        self,
+                        "Capacity Reached",
+                        f"You cannot select more than {capacity} players for this outing.",
+                    )
+                else:
+                    QMessageBox.information(
+                        self,
+                        "Capacity Reached",
+                        f"Only {added_count} player(s) were added because the outing capacity is {capacity}.",
+                    )
                 break
 
             if member_id not in self.selected_member_ids_set:
                 self.selected_member_ids_set.add(member_id)
                 current_selected += 1
+                added_count += 1
 
         self.refresh_available_members()
         self.refresh_selected_members()
@@ -205,9 +221,42 @@ class OutingAssignmentDialog(QDialog):
         self.refresh_available_members()
         self.refresh_selected_members()
 
+    def add_double_clicked_member(self, item):
+        if not item:
+            return
+
+        capacity = self._get_capacity()
+        current_selected = len(self.selected_member_ids_set)
+        member_id = int(item.data(Qt.UserRole))
+
+        if capacity is not None and current_selected >= capacity:
+            QMessageBox.warning(
+                self,
+                "Capacity Reached",
+                f"You cannot select more than {capacity} players for this outing.",
+            )
+            return
+
+        if member_id not in self.selected_member_ids_set:
+            self.selected_member_ids_set.add(member_id)
+
+        self.refresh_available_members()
+        self.refresh_selected_members()
+
+    def remove_double_clicked_member(self, item):
+        if not item:
+            return
+
+        member_id = int(item.data(Qt.UserRole))
+        self.selected_member_ids_set.discard(member_id)
+
+        self.refresh_available_members()
+        self.refresh_selected_members()
+
     def select_all_visible(self):
         capacity = self._get_capacity()
         current_selected = len(self.selected_member_ids_set)
+        added_count = 0
 
         for i in range(self.available_list.count()):
             item = self.available_list.item(i)
@@ -219,6 +268,19 @@ class OutingAssignmentDialog(QDialog):
             if member_id not in self.selected_member_ids_set:
                 self.selected_member_ids_set.add(member_id)
                 current_selected += 1
+                added_count += 1
+
+        if (
+            capacity is not None
+            and self.available_list.count() > 0
+            and current_selected >= capacity
+            and added_count < self.available_list.count()
+        ):
+            QMessageBox.information(
+                self,
+                "Capacity Reached",
+                f"Only {added_count} visible player(s) were added because the outing capacity is {capacity}.",
+            )
 
         self.refresh_available_members()
         self.refresh_selected_members()

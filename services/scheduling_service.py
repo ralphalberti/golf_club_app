@@ -6,6 +6,7 @@ from repositories.member_repository import MemberRepository
 from repositories.outing_repository import OutingRepository
 from services.pairing_service import PairingService
 from services.rotation_service import RotationService
+from services.settings_service import SettingsService
 
 
 class SchedulingService:
@@ -15,6 +16,7 @@ class SchedulingService:
         self.outing_repo = OutingRepository(db)
         self.pairing_service = PairingService(db)
         self.rotation_service = RotationService(db)
+        self.settings_service = SettingsService(db)
 
     def generate_schedule(
         self,
@@ -35,10 +37,13 @@ class SchedulingService:
             tee_times=tee_times,
             member_ids=member_ids,
             member_map=member_map,
-            randomized=False,
-            attempts=1,
+            randomized=True,
+            attempts=60,
             current_groups=None,
+            mode="moderate",
         )
+
+        groups = self._order_groups_for_tee_times(groups)
 
         self.outing_repo.replace_assignments(outing_id, groups)
         self.outing_repo.increment_version(outing_id)
@@ -68,14 +73,20 @@ class SchedulingService:
         member_map = self._get_member_map(member_ids)
         current_groups = self._groups_from_assignments(assignments, tee_times)
 
+        reshuffle_mode = self.settings_service.get_reshuffle_mode()
+        attempts = self._get_attempt_count_for_mode(reshuffle_mode)
+
         groups = self._build_best_groups(
             tee_times=tee_times,
             member_ids=member_ids,
             member_map=member_map,
             randomized=True,
-            attempts=50,
+            attempts=attempts,
             current_groups=current_groups,
+            mode=reshuffle_mode,
         )
+
+        groups = self._order_groups_for_tee_times(groups)
 
         self.outing_repo.replace_assignments(outing_id, groups)
         self.outing_repo.increment_version(outing_id)
@@ -89,6 +100,7 @@ class SchedulingService:
         randomized: bool,
         attempts: int,
         current_groups: list[list[int]] | None,
+        mode: str,
     ) -> list[list[int]]:
         best_groups = None
         best_score = float("inf")
@@ -99,6 +111,7 @@ class SchedulingService:
                 member_ids=member_ids,
                 member_map=member_map,
                 randomized=randomized,
+                mode=mode,
             )
 
             if candidate_groups is None:
@@ -109,6 +122,7 @@ class SchedulingService:
                 member_ids=member_ids,
                 member_map=member_map,
                 current_groups=current_groups,
+                mode=mode,
             )
 
             if candidate_score < best_score:
@@ -128,6 +142,7 @@ class SchedulingService:
         member_ids: list[int],
         member_map: dict[int, dict],
         randomized: bool,
+        mode: str,
     ) -> list[list[int]] | None:
         pairing_counts = self.pairing_service.get_pairing_counts(member_ids)
         rotation_stats = self.rotation_service.get_stats(member_ids)
@@ -185,7 +200,10 @@ class SchedulingService:
                 score += self._tier_balance_penalty(candidate_group, member_map)
 
                 if randomized:
-                    score += random.uniform(0.0, 0.35)
+                    score += random.uniform(
+                        0.0,
+                        self._get_randomness_strength_for_mode(mode),
+                    )
 
                 candidate_options.append((score, tee_index))
 
@@ -201,6 +219,7 @@ class SchedulingService:
             pairing_counts=pairing_counts,
             member_map=member_map,
             randomized=randomized,
+            mode=mode,
         )
 
         self._validate_final_groups(
@@ -211,6 +230,20 @@ class SchedulingService:
         )
 
         return groups
+
+    def _get_attempt_count_for_mode(self, mode: str) -> int:
+        if mode == "conservative":
+            return 12
+        if mode == "aggressive":
+            return 90
+        return 50
+
+    def _get_randomness_strength_for_mode(self, mode: str) -> float:
+        if mode == "conservative":
+            return 0.12
+        if mode == "aggressive":
+            return 0.60
+        return 0.35
 
     def _groups_from_assignments(self, assignments, tee_times) -> list[list[int]]:
         tee_time_id_to_index = {
@@ -242,6 +275,7 @@ class SchedulingService:
         member_ids: list[int],
         member_map: dict[int, dict],
         current_groups: list[list[int]] | None,
+        mode: str,
     ) -> float:
         pairing_counts = self.pairing_service.get_pairing_counts(member_ids)
         score = 0.0
@@ -250,10 +284,69 @@ class SchedulingService:
             score += self._group_pairing_score(group, pairing_counts)
             score += self._tier_balance_penalty(group, member_map)
 
-        if current_groups is not None and groups == current_groups:
-            score += 1000.0
+        if current_groups is not None:
+            score += self._stability_penalty(groups, current_groups, mode)
+            score += self._pair_retention_penalty(groups, current_groups, mode)
 
         return score
+
+    def _stability_penalty(
+        self,
+        groups: list[list[int]],
+        current_groups: list[list[int]],
+        mode: str,
+    ) -> float:
+        if not current_groups:
+            return 0.0
+
+        current_group_index_by_member = {}
+        for group_idx, group in enumerate(current_groups):
+            for member_id in group:
+                current_group_index_by_member[member_id] = group_idx
+
+        moved_count = 0
+        for group_idx, group in enumerate(groups):
+            for member_id in group:
+                if current_group_index_by_member.get(member_id) != group_idx:
+                    moved_count += 1
+
+        if mode == "conservative":
+            return moved_count * 8.0
+        if mode == "aggressive":
+            return moved_count * 0.5
+        return moved_count * 3.0
+
+    def _pair_retention_penalty(
+        self,
+        groups: list[list[int]],
+        current_groups: list[list[int]],
+        mode: str,
+    ) -> float:
+        if not current_groups:
+            return 0.0
+
+        current_pairs = self._extract_pairs(current_groups)
+        new_pairs = self._extract_pairs(groups)
+
+        preserved_pairs = len(current_pairs & new_pairs)
+
+        if mode == "conservative":
+            return preserved_pairs * -4.0
+        if mode == "aggressive":
+            return preserved_pairs * 3.0
+        return preserved_pairs * 0.5
+
+    def _extract_pairs(self, groups: list[list[int]]) -> set[tuple[int, int]]:
+        pairs = set()
+
+        for group in groups:
+            for i in range(len(group)):
+                for j in range(i + 1, len(group)):
+                    a = min(group[i], group[j])
+                    b = max(group[i], group[j])
+                    pairs.add((a, b))
+
+        return pairs
 
     def _normalize_member_ids(self, member_ids: list[int]) -> list[int]:
         seen: set[int] = set()
@@ -391,6 +484,7 @@ class SchedulingService:
         pairing_counts: dict,
         member_map: dict[int, dict],
         randomized: bool,
+        mode: str,
     ) -> list[list[int]]:
         improved = True
 
@@ -437,7 +531,10 @@ class SchedulingService:
                         )
 
                         if randomized:
-                            swapped_score += random.uniform(0.0, 0.15)
+                            swapped_score += random.uniform(
+                                0.0,
+                                self._get_randomness_strength_for_mode(mode) / 2.0,
+                            )
 
                         if swapped_score < current_score:
                             groups[i], groups[j] = new_i, new_j
@@ -450,3 +547,16 @@ class SchedulingService:
                     break
 
         return groups
+
+    def _order_groups_for_tee_times(
+        self,
+        groups: list[list[int]],
+    ) -> list[list[int]]:
+        """
+        Prefer smaller groups earlier in the tee sheet.
+
+        Stable sort means groups of the same size keep their relative order.
+        So:
+            [4, 3, 4, 3] -> [3, 3, 4, 4]
+        """
+        return sorted(groups, key=len)

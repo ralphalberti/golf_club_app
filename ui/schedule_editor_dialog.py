@@ -1,4 +1,5 @@
 from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QColor, QBrush
 from PyQt5.QtWidgets import (
     QAbstractItemView,
     QDialog,
@@ -73,10 +74,12 @@ class AssignmentsTreeWidget(QTreeWidget):
 
 
 class ScheduleEditorDialog(QDialog):
-    def __init__(self, outing_id, outing_service, parent=None):
+    def __init__(self, outing_id, outing_service, settings_service, parent=None):
         super().__init__(parent)
         self.outing_id = outing_id
         self.outing_service = outing_service
+        self.settings_service = settings_service
+        self.settings = self.settings_service.get_all()
 
         self.setWindowTitle("Edit Schedule")
         self.resize(1000, 650)
@@ -133,6 +136,7 @@ class ScheduleEditorDialog(QDialog):
         self.load_data()
 
     def load_data(self):
+        self.settings = self.settings_service.get_all()
         self.load_available_members()
         self.load_assignments_tree()
 
@@ -144,9 +148,14 @@ class ScheduleEditorDialog(QDialog):
             text = f"{row['first_name']} {row['last_name']}"
             item = QListWidgetItem(text)
             item.setData(Qt.UserRole, int(row["id"]))
+            item.setData(Qt.UserRole + 1, row["skill_tier"])
+
+            self._apply_tier_color_to_list_item(item, row["skill_tier"])
+
             self.available_members_list.addItem(item)
 
     def load_assignments_tree(self):
+        self.settings = self.settings_service.get_all()
         self.assignments_tree.clear()
 
         tee_times = self.outing_service.get_tee_times(self.outing_id)
@@ -176,9 +185,12 @@ class ScheduleEditorDialog(QDialog):
                 child = QTreeWidgetItem([f"{row['first_name']} {row['last_name']}"])
                 child.setData(0, Qt.UserRole, int(row["id"]))  # assignment id
                 child.setData(0, Qt.UserRole + 1, int(row["member_id"]))  # member id
+                child.setData(0, Qt.UserRole + 2, row["skill_tier"])  # skill tier
                 child.setFlags(
                     Qt.ItemIsEnabled | Qt.ItemIsSelectable | Qt.ItemIsDragEnabled
                 )
+
+                self._apply_tier_color_to_tree_item(child, row["skill_tier"])
                 group_item.addChild(child)
 
             self.update_group_label(group_item)
@@ -189,7 +201,30 @@ class ScheduleEditorDialog(QDialog):
         tee_time_text = group_item.data(0, Qt.UserRole + 2)
         max_players = int(group_item.data(0, Qt.UserRole + 1))
         current_players = group_item.childCount()
-        group_item.setText(0, f"{tee_time_text} ({current_players}/{max_players})")
+
+        label = f"{tee_time_text} ({current_players}/{max_players})"
+
+        if self.settings.get("show_tier_summary", True):
+            tier_counts = {1: 0, 2: 0, 3: 0}
+
+            for i in range(group_item.childCount()):
+                child = group_item.child(i)
+                tier = child.data(0, Qt.UserRole + 2)
+                if tier is None:
+                    continue
+
+                tier = int(tier)
+                if tier in tier_counts:
+                    tier_counts[tier] += 1
+
+            # tier_summary = (
+            #     f"T1:{tier_counts[1]}  T2:{tier_counts[2]}  T3:{tier_counts[3]}"
+            # )
+            # label = f"{label}  [{tier_summary}]"
+            tier_summary = f"1:{tier_counts[1]}  2:{tier_counts[2]}  3:{tier_counts[3]}"
+            label = f"{label}    |    {tier_summary}"
+
+        group_item.setText(0, label)
 
     def get_selected_group_item(self):
         current_item = self.assignments_tree.currentItem()
@@ -287,12 +322,16 @@ class ScheduleEditorDialog(QDialog):
             return
 
         selected_tee_time_id = int(group_item.data(0, Qt.UserRole))
-        member_ids_to_add = []
-        member_names_to_add = []
+        members_to_add = []
 
         for item in member_items[:available_slots]:
-            member_ids_to_add.append(int(item.data(Qt.UserRole)))
-            member_names_to_add.append(item.text())
+            members_to_add.append(
+                (
+                    int(item.data(Qt.UserRole)),
+                    item.text(),
+                    item.data(Qt.UserRole + 1),
+                )
+            )
 
         if len(member_items) > available_slots:
             QMessageBox.information(
@@ -301,13 +340,16 @@ class ScheduleEditorDialog(QDialog):
                 f"Only {available_slots} player(s) could be added because that tee time does not have enough open slots.",
             )
 
-        for member_id, member_name in zip(member_ids_to_add, member_names_to_add):
+        for member_id, member_name, skill_tier in members_to_add:
             child = QTreeWidgetItem([member_name])
             child.setData(0, Qt.UserRole, -1)  # temp assignment id
             child.setData(0, Qt.UserRole + 1, member_id)  # member id
+            child.setData(0, Qt.UserRole + 2, skill_tier)  # skill tier
             child.setFlags(
                 Qt.ItemIsEnabled | Qt.ItemIsSelectable | Qt.ItemIsDragEnabled
             )
+
+            self._apply_tier_color_to_tree_item(child, skill_tier)
             group_item.addChild(child)
 
         self.update_group_label(group_item)
@@ -317,8 +359,6 @@ class ScheduleEditorDialog(QDialog):
             return
 
         self.persist_tree_structure()
-
-        # Re-select the same tee time after reload
         self.select_group_by_tee_time_id(selected_tee_time_id)
 
     def remove_selected_assignment(self):
@@ -404,12 +444,15 @@ class ScheduleEditorDialog(QDialog):
         selected_tee_time_id = int(group_item.data(0, Qt.UserRole))
         member_id = int(item.data(Qt.UserRole))
         member_name = item.text()
+        skill_tier = item.data(Qt.UserRole + 1)
 
         child = QTreeWidgetItem([member_name])
         child.setData(0, Qt.UserRole, -1)  # temp assignment id
         child.setData(0, Qt.UserRole + 1, member_id)  # member id
+        child.setData(0, Qt.UserRole + 2, skill_tier)  # skill tier
         child.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable | Qt.ItemIsDragEnabled)
 
+        self._apply_tier_color_to_tree_item(child, skill_tier)
         group_item.addChild(child)
         self.update_group_label(group_item)
 
@@ -458,3 +501,31 @@ class ScheduleEditorDialog(QDialog):
                 "Reshuffle Failed",
                 f"Could not reshuffle the schedule.\n\n{exc}",
             )
+
+    def _apply_tier_color_to_tree_item(self, item, skill_tier):
+        if not self.settings.get("show_tier_colors", True):
+            return
+
+        if skill_tier is None:
+            return
+
+        skill_tier = int(skill_tier)
+
+        if skill_tier == 1:
+            item.setForeground(0, QBrush(QColor("#2e8b57")))
+        elif skill_tier == 3:
+            item.setForeground(0, QBrush(QColor("#c9a000")))
+
+    def _apply_tier_color_to_list_item(self, item, skill_tier):
+        if not self.settings.get("show_tier_colors", True):
+            return
+
+        if skill_tier is None:
+            return
+
+        skill_tier = int(skill_tier)
+
+        if skill_tier == 1:
+            item.setForeground(QBrush(QColor("#2e8b57")))
+        elif skill_tier == 3:
+            item.setForeground(QBrush(QColor("#c9a000")))
