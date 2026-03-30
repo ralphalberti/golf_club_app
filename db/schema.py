@@ -66,8 +66,10 @@ CREATE TABLE IF NOT EXISTS outings (
     tee_time_count INTEGER NOT NULL,
     max_players_per_tee_time INTEGER NOT NULL DEFAULT 4,
     status TEXT NOT NULL DEFAULT 'draft',
+    workflow_stage TEXT NOT NULL DEFAULT 'draft',
     version INTEGER NOT NULL DEFAULT 1,
     notes TEXT,
+    fee REAL,
     created_by INTEGER,
     updated_by INTEGER,
     created_at TEXT NOT NULL,
@@ -135,6 +137,48 @@ CREATE TABLE IF NOT EXISTS member_tee_order (
     FOREIGN KEY (member_id) REFERENCES members(id)
 );
 
+CREATE TABLE IF NOT EXISTS outing_rsvps (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    outing_id INTEGER NOT NULL,
+    member_id INTEGER NOT NULL,
+    status TEXT NOT NULL CHECK(status IN ('invited', 'yes', 'no', 'maybe')),
+    responded_at TEXT,
+    note TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(outing_id, member_id),
+    FOREIGN KEY (outing_id) REFERENCES outings(id) ON DELETE CASCADE,
+    FOREIGN KEY (member_id) REFERENCES members(id)
+);
+
+CREATE TABLE IF NOT EXISTS guests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    first_name TEXT NOT NULL,
+    last_name TEXT NOT NULL,
+    email TEXT,
+    phone TEXT,
+    notes TEXT,
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS outing_guests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    outing_id INTEGER NOT NULL,
+    guest_id INTEGER NOT NULL,
+    sponsoring_member_id INTEGER NOT NULL,
+    status TEXT NOT NULL CHECK(status IN ('invited', 'yes', 'no', 'maybe')),
+    responded_at TEXT,
+    note TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(outing_id, guest_id),
+    FOREIGN KEY (outing_id) REFERENCES outings(id) ON DELETE CASCADE,
+    FOREIGN KEY (guest_id) REFERENCES guests(id),
+    FOREIGN KEY (sponsoring_member_id) REFERENCES members(id)
+);
+
 CREATE TABLE IF NOT EXISTS email_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     outing_id INTEGER NOT NULL,
@@ -165,31 +209,18 @@ def create_schema(db: Database) -> None:
     with db.get_conn() as conn:
         conn.executescript(SCHEMA_SQL)
 
-        existing_columns = {
-            row["name"]
-            for row in conn.execute("PRAGMA table_info(app_settings)").fetchall()
+        outing_columns = {
+            row["name"] for row in conn.execute("PRAGMA table_info(outings)").fetchall()
         }
 
-        if "scheduler_algorithm" not in existing_columns:
+        if "workflow_stage" not in outing_columns:
             conn.execute("""
-                ALTER TABLE app_settings
-                ADD COLUMN scheduler_algorithm TEXT NOT NULL DEFAULT 'balanced'
+                ALTER TABLE outings
+                ADD COLUMN workflow_stage TEXT NOT NULL DEFAULT 'draft'
                 """)
 
-        if "reshuffle_mode" not in existing_columns:
+        if "fee" not in outing_columns:
             conn.execute("""
-                ALTER TABLE app_settings
-                ADD COLUMN reshuffle_mode TEXT NOT NULL DEFAULT 'moderate'
-                """)
-
-        if "show_tier_colors" not in existing_columns:
-            conn.execute("""
-                ALTER TABLE app_settings
-                ADD COLUMN show_tier_colors INTEGER NOT NULL DEFAULT 1
-                """)
-
-        if "show_tier_summary" not in existing_columns:
-            conn.execute("""
-                ALTER TABLE app_settings
-                ADD COLUMN show_tier_summary INTEGER NOT NULL DEFAULT 1
+                ALTER TABLE outings
+                ADD COLUMN fee REAL
                 """)
