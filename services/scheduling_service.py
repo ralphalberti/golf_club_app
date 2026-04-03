@@ -6,6 +6,7 @@ from repositories.member_repository import MemberRepository
 from repositories.outing_repository import OutingRepository
 from services.pairing_service import PairingService
 from services.rotation_service import RotationService
+from services.scheduler_units import SchedulingUnitService
 from services.settings_service import SettingsService
 
 
@@ -17,15 +18,25 @@ class SchedulingService:
         self.pairing_service = PairingService(db)
         self.rotation_service = RotationService(db)
         self.settings_service = SettingsService(db)
+        self.unit_service = SchedulingUnitService(db)
 
     def generate_schedule(
         self,
         outing_id: int,
-        member_ids: list[int],
+        member_ids: list[int] | None = None,
     ) -> list[list[int]]:
+        """
+        Native unit-aware behavior:
+        - if member_ids is omitted, schedule all RSVP=yes sponsor members
+        - build/score/place sponsor-linked units during schedule construction
+        - persist sponsor member assignments only
+        """
         tee_times = self.outing_repo.get_tee_times(outing_id)
         if not tee_times:
             raise ValueError("No tee times found for outing.")
+
+        if member_ids is None:
+            member_ids = self.unit_service.sponsor_member_ids_for_outing(outing_id)
 
         member_ids = self._normalize_member_ids(member_ids)
         if not member_ids:
@@ -34,6 +45,7 @@ class SchedulingService:
         member_map = self._get_member_map(member_ids)
 
         groups = self._build_best_groups(
+            outing_id=outing_id,
             tee_times=tee_times,
             member_ids=member_ids,
             member_map=member_map,
@@ -41,9 +53,17 @@ class SchedulingService:
             attempts=60,
             current_groups=None,
             mode="moderate",
+            enforce_units=True,
+            enforced_member_ids=None,
         )
 
-        groups = self._order_groups_for_tee_times(groups)
+        groups = self._order_groups_for_tee_times(
+            outing_id=outing_id,
+            groups=groups,
+            enforced_member_ids=None,
+        )
+
+        self.unit_service.validate_expanded_groups(outing_id, groups)
 
         self.outing_repo.replace_assignments(outing_id, groups)
         self.outing_repo.increment_version(outing_id)
@@ -77,6 +97,7 @@ class SchedulingService:
         attempts = self._get_attempt_count_for_mode(reshuffle_mode)
 
         groups = self._build_best_groups(
+            outing_id=outing_id,
             tee_times=tee_times,
             member_ids=member_ids,
             member_map=member_map,
@@ -84,9 +105,21 @@ class SchedulingService:
             attempts=attempts,
             current_groups=current_groups,
             mode=reshuffle_mode,
+            enforce_units=True,
+            enforced_member_ids=member_ids,
         )
 
-        groups = self._order_groups_for_tee_times(groups)
+        groups = self._order_groups_for_tee_times(
+            outing_id=outing_id,
+            groups=groups,
+            enforced_member_ids=member_ids,
+        )
+
+        self.unit_service.validate_expanded_groups_for_member_ids(
+            outing_id,
+            groups,
+            member_ids,
+        )
 
         self.outing_repo.replace_assignments(outing_id, groups)
         self.outing_repo.increment_version(outing_id)
@@ -94,6 +127,7 @@ class SchedulingService:
 
     def _build_best_groups(
         self,
+        outing_id: int,
         tee_times,
         member_ids: list[int],
         member_map: dict[int, dict],
@@ -101,51 +135,96 @@ class SchedulingService:
         attempts: int,
         current_groups: list[list[int]] | None,
         mode: str,
+        enforce_units: bool = False,
+        enforced_member_ids: list[int] | None = None,
     ) -> list[list[int]]:
         best_groups = None
         best_score = float("inf")
 
         for _ in range(max(1, attempts)):
             candidate_groups = self._build_single_schedule(
+                outing_id=outing_id,
                 tee_times=tee_times,
                 member_ids=member_ids,
                 member_map=member_map,
                 randomized=randomized,
                 mode=mode,
+                enforced_member_ids=enforced_member_ids,
             )
 
             if candidate_groups is None:
                 continue
 
+            if enforce_units:
+                try:
+                    if enforced_member_ids is None:
+                        self.unit_service.validate_expanded_groups(
+                            outing_id,
+                            candidate_groups,
+                        )
+                    else:
+                        self.unit_service.validate_expanded_groups_for_member_ids(
+                            outing_id,
+                            candidate_groups,
+                            enforced_member_ids,
+                        )
+                except ValueError:
+                    continue
+
             candidate_score = self._schedule_score(
+                outing_id=outing_id,
                 groups=candidate_groups,
                 member_ids=member_ids,
                 member_map=member_map,
                 current_groups=current_groups,
                 mode=mode,
+                enforced_member_ids=enforced_member_ids,
             )
+
+            if enforce_units:
+                candidate_score += self._expanded_group_shape_penalty(
+                    outing_id,
+                    candidate_groups,
+                    enforced_member_ids=enforced_member_ids,
+                )
 
             if candidate_score < best_score:
                 best_score = candidate_score
                 best_groups = candidate_groups
 
         if best_groups is None:
+            if enforce_units:
+                raise ValueError(
+                    "Unable to build a valid schedule with the current tier "
+                    "constraints, tee-time capacity, and sponsor-guest unit sizes."
+                )
             raise ValueError(
-                "Unable to build a valid schedule with the current tier constraints and tee-time capacity."
+                "Unable to build a valid schedule with the current tier constraints "
+                "and tee-time capacity."
             )
 
         return best_groups
 
     def _build_single_schedule(
         self,
+        outing_id: int,
         tee_times,
         member_ids: list[int],
         member_map: dict[int, dict],
         randomized: bool,
         mode: str,
+        enforced_member_ids: list[int] | None = None,
     ) -> list[list[int]] | None:
         pairing_counts = self.pairing_service.get_pairing_counts(member_ids)
         rotation_stats = self.rotation_service.get_stats(member_ids)
+
+        if enforced_member_ids is None:
+            unit_map = self.unit_service.build_unit_map_for_outing(outing_id)
+        else:
+            unit_map = self.unit_service.build_unit_map_for_member_ids(
+                outing_id,
+                enforced_member_ids,
+            )
 
         groups: list[list[int]] = [[] for _ in tee_times]
         max_index = max(0, len(groups) - 1)
@@ -153,16 +232,19 @@ class SchedulingService:
         base_order = sorted(
             member_ids,
             key=lambda mid: (
+                -self._unit_size_for_member(mid, unit_map),
                 rotation_stats.get(mid, {}).get("total_rounds", 0),
                 rotation_stats.get(mid, {}).get("average_tee_index", 0),
                 mid,
             ),
-            reverse=True,
+            reverse=False,
         )
 
         if randomized:
-            ordered_members = base_order[:]
-            random.shuffle(ordered_members)
+            ordered_members = self._shuffle_preserving_unit_size_priority(
+                base_order,
+                unit_map,
+            )
         else:
             ordered_members = base_order
 
@@ -173,16 +255,21 @@ class SchedulingService:
             if randomized:
                 random.shuffle(tee_indexes)
 
+            candidate_unit_size = self._unit_size_for_member(member_id, unit_map)
+
             for tee_index in tee_indexes:
                 group = groups[tee_index]
                 max_players = int(tee_times[tee_index]["max_players"])
+                current_size = self._expanded_group_size(group, unit_map)
 
-                if len(group) >= max_players:
+                if current_size + candidate_unit_size > max_players:
                     continue
 
                 candidate_group = group + [member_id]
                 if not self._valid_group(candidate_group, member_map):
                     continue
+
+                projected_size = current_size + candidate_unit_size
 
                 score = 0.0
                 score += self.pairing_service.pairing_penalty(
@@ -196,8 +283,11 @@ class SchedulingService:
                     max_index,
                     rotation_stats,
                 )
-                score += len(group) * 0.5
+                score += current_size * 0.5
                 score += self._tier_balance_penalty(candidate_group, member_map)
+                score += self._projected_group_shape_penalty(
+                    projected_size, max_players
+                )
 
                 if randomized:
                     score += random.uniform(
@@ -215,18 +305,22 @@ class SchedulingService:
             groups[best_idx].append(member_id)
 
         groups = self._improve_by_swaps(
+            outing_id=outing_id,
             groups=groups,
             pairing_counts=pairing_counts,
             member_map=member_map,
             randomized=randomized,
             mode=mode,
+            enforced_member_ids=enforced_member_ids,
         )
 
         self._validate_final_groups(
+            outing_id=outing_id,
             groups=groups,
             tee_times=tee_times,
             member_map=member_map,
             expected_member_ids=member_ids,
+            enforced_member_ids=enforced_member_ids,
         )
 
         return groups
@@ -271,22 +365,72 @@ class SchedulingService:
 
     def _schedule_score(
         self,
+        outing_id: int,
         groups: list[list[int]],
         member_ids: list[int],
         member_map: dict[int, dict],
         current_groups: list[list[int]] | None,
         mode: str,
+        enforced_member_ids: list[int] | None = None,
     ) -> float:
         pairing_counts = self.pairing_service.get_pairing_counts(member_ids)
+
+        if enforced_member_ids is None:
+            unit_map = self.unit_service.build_unit_map_for_outing(outing_id)
+        else:
+            unit_map = self.unit_service.build_unit_map_for_member_ids(
+                outing_id,
+                enforced_member_ids,
+            )
+
         score = 0.0
 
         for group in groups:
             score += self._group_pairing_score(group, pairing_counts)
             score += self._tier_balance_penalty(group, member_map)
+            score += self._per_group_fill_penalty(group, unit_map)
 
         if current_groups is not None:
             score += self._stability_penalty(groups, current_groups, mode)
             score += self._pair_retention_penalty(groups, current_groups, mode)
+
+        return score
+
+    def _expanded_group_shape_penalty(
+        self,
+        outing_id: int,
+        groups: list[list[int]],
+        enforced_member_ids: list[int] | None = None,
+    ) -> float:
+        """
+        Lower is better.
+        - prefer foursomes over smaller expanded groups
+        - prefer smaller expanded groups earlier in the tee sheet
+        """
+        if enforced_member_ids is None:
+            expanded_sizes = self.unit_service.expanded_group_sizes(outing_id, groups)
+        else:
+            expanded_sizes = self.unit_service.expanded_group_sizes_for_member_ids(
+                outing_id,
+                groups,
+                enforced_member_ids,
+            )
+
+        score = 0.0
+
+        for size in expanded_sizes:
+            if size == 4:
+                score -= 3.0
+            elif size == 3:
+                score -= 1.0
+            elif size == 2:
+                score += 2.0
+            elif size == 1:
+                score += 6.0
+
+        for idx in range(len(expanded_sizes) - 1):
+            if expanded_sizes[idx] > expanded_sizes[idx + 1]:
+                score += 1.5
 
         return score
 
@@ -442,17 +586,27 @@ class SchedulingService:
 
     def _validate_final_groups(
         self,
+        outing_id: int,
         groups: list[list[int]],
         tee_times,
         member_map: dict[int, dict],
         expected_member_ids: list[int],
+        enforced_member_ids: list[int] | None = None,
     ) -> None:
         seen: set[int] = set()
+
+        if enforced_member_ids is None:
+            unit_map = self.unit_service.build_unit_map_for_outing(outing_id)
+        else:
+            unit_map = self.unit_service.build_unit_map_for_member_ids(
+                outing_id,
+                enforced_member_ids,
+            )
 
         for idx, group in enumerate(groups):
             max_players = int(tee_times[idx]["max_players"])
 
-            if len(group) > max_players:
+            if self._expanded_group_size(group, unit_map) > max_players:
                 raise ValueError("A generated group exceeds the tee-time maximum.")
 
             if not self._valid_group(group, member_map):
@@ -480,12 +634,22 @@ class SchedulingService:
 
     def _improve_by_swaps(
         self,
+        outing_id: int,
         groups: list[list[int]],
         pairing_counts: dict,
         member_map: dict[int, dict],
         randomized: bool,
         mode: str,
+        enforced_member_ids: list[int] | None = None,
     ) -> list[list[int]]:
+        if enforced_member_ids is None:
+            unit_map = self.unit_service.build_unit_map_for_outing(outing_id)
+        else:
+            unit_map = self.unit_service.build_unit_map_for_member_ids(
+                outing_id,
+                enforced_member_ids,
+            )
+
         improved = True
 
         while improved:
@@ -498,6 +662,8 @@ class SchedulingService:
                         + self._group_pairing_score(groups[j], pairing_counts)
                         + self._tier_balance_penalty(groups[i], member_map)
                         + self._tier_balance_penalty(groups[j], member_map)
+                        + self._per_group_fill_penalty(groups[i], unit_map)
+                        + self._per_group_fill_penalty(groups[j], unit_map)
                     )
 
                     swap_candidates = [
@@ -523,11 +689,23 @@ class SchedulingService:
                         if not self._valid_group(new_j, member_map):
                             continue
 
+                        # Capacity checks must be unit-aware.
+                        max_players_i = 4
+                        max_players_j = 4
+                        # The final validate step uses actual tee max, but swap improvement
+                        # should at least reject impossible 4-ball expansions here.
+                        if self._expanded_group_size(new_i, unit_map) > max_players_i:
+                            continue
+                        if self._expanded_group_size(new_j, unit_map) > max_players_j:
+                            continue
+
                         swapped_score = (
                             self._group_pairing_score(new_i, pairing_counts)
                             + self._group_pairing_score(new_j, pairing_counts)
                             + self._tier_balance_penalty(new_i, member_map)
                             + self._tier_balance_penalty(new_j, member_map)
+                            + self._per_group_fill_penalty(new_i, unit_map)
+                            + self._per_group_fill_penalty(new_j, unit_map)
                         )
 
                         if randomized:
@@ -550,13 +728,87 @@ class SchedulingService:
 
     def _order_groups_for_tee_times(
         self,
+        outing_id: int,
         groups: list[list[int]],
+        enforced_member_ids: list[int] | None = None,
     ) -> list[list[int]]:
         """
-        Prefer smaller groups earlier in the tee sheet.
-
-        Stable sort means groups of the same size keep their relative order.
-        So:
-            [4, 3, 4, 3] -> [3, 3, 4, 4]
+        Prefer smaller expanded groups earlier in the tee sheet.
+        Stable sort preserves relative order among equal-sized groups.
         """
-        return sorted(groups, key=len)
+        if enforced_member_ids is None:
+            expanded_sizes = self.unit_service.expanded_group_sizes(outing_id, groups)
+        else:
+            expanded_sizes = self.unit_service.expanded_group_sizes_for_member_ids(
+                outing_id,
+                groups,
+                enforced_member_ids,
+            )
+
+        indexed_groups = list(enumerate(groups))
+        indexed_groups.sort(key=lambda item: (expanded_sizes[item[0]], item[0]))
+        return [group for _, group in indexed_groups]
+
+    def _unit_size_for_member(self, member_id: int, unit_map: dict[int, object]) -> int:
+        unit = unit_map.get(int(member_id))
+        if unit is None:
+            return 1
+        return int(unit.size)
+
+    def _expanded_group_size(
+        self,
+        group: list[int],
+        unit_map: dict[int, object],
+    ) -> int:
+        return sum(
+            self._unit_size_for_member(member_id, unit_map) for member_id in group
+        )
+
+    def _projected_group_shape_penalty(
+        self,
+        projected_size: int,
+        max_players: int,
+    ) -> float:
+        if projected_size == max_players:
+            return -2.0
+        if projected_size == max_players - 1:
+            return -0.75
+        if projected_size <= 1:
+            return 2.0
+        return 0.0
+
+    def _per_group_fill_penalty(
+        self,
+        group: list[int],
+        unit_map: dict[int, object],
+    ) -> float:
+        size = self._expanded_group_size(group, unit_map)
+
+        if size == 4:
+            return -2.0
+        if size == 3:
+            return -0.75
+        if size == 2:
+            return 1.0
+        if size == 1:
+            return 3.0
+        return 0.0
+
+    def _shuffle_preserving_unit_size_priority(
+        self,
+        ordered_members: list[int],
+        unit_map: dict[int, object],
+    ) -> list[int]:
+        buckets: dict[int, list[int]] = {}
+
+        for member_id in ordered_members:
+            size = self._unit_size_for_member(member_id, unit_map)
+            buckets.setdefault(size, []).append(member_id)
+
+        shuffled: list[int] = []
+        for size in sorted(buckets.keys(), reverse=True):
+            bucket = buckets[size][:]
+            random.shuffle(bucket)
+            shuffled.extend(bucket)
+
+        return shuffled
