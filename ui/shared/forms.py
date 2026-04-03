@@ -106,6 +106,59 @@ class MemberFormDialog(QDialog):
         }
 
 
+class GuestFormDialog(QDialog):
+    def __init__(self, guest=None, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Guest")
+
+        self.first_name = QLineEdit(guest["first_name"] if guest else "")
+        self.last_name = QLineEdit(guest["last_name"] if guest else "")
+        self.email = QLineEdit(guest["email"] if guest else "")
+        self.phone = QLineEdit(guest["phone"] if guest else "")
+
+        self.notes = QTextEdit(guest["notes"] if guest else "")
+
+        self.active = QCheckBox()
+        self.active.setChecked(True if not guest else bool(guest["active"]))
+
+        form = QFormLayout(self)
+        form.addRow("First name", self.first_name)
+        form.addRow("Last name", self.last_name)
+        form.addRow("Email", self.email)
+        form.addRow("Phone", self.phone)
+        form.addRow("Active", self.active)
+        form.addRow("Notes", self.notes)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        form.addRow(buttons)
+
+    def accept(self):
+        first_name = self.first_name.text().strip()
+        last_name = self.last_name.text().strip()
+
+        if not first_name or not last_name:
+            QMessageBox.warning(
+                self,
+                "Missing Required Fields",
+                "First name and last name are required.",
+            )
+            return
+
+        super().accept()
+
+    def values(self):
+        return {
+            "first_name": self.first_name.text().strip(),
+            "last_name": self.last_name.text().strip(),
+            "email": self.email.text().strip().lower(),
+            "phone": self.phone.text().strip(),
+            "active": 1 if self.active.isChecked() else 0,
+            "notes": self.notes.toPlainText().strip(),
+        }
+
+
 class CourseFormDialog(QDialog):
     def __init__(self, course=None):
         super().__init__()
