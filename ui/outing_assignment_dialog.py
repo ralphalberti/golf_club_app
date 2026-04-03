@@ -1,3 +1,7 @@
+# DEPRECATED: OutingAssignmentDialog
+# This dialog supported manual member selection for scheduling.
+# Scheduling is now driven by RSVP-yes members and sponsor-linked guest units.
+# Safe to remove once no rollback is needed.
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QAbstractItemView,
@@ -11,6 +15,9 @@ from PyQt5.QtWidgets import (
     QLineEdit,
     QMessageBox,
 )
+
+DataRole = Qt.ItemDataRole
+SelectionMode = QAbstractItemView.SelectionMode
 
 
 class OutingAssignmentDialog(QDialog):
@@ -32,8 +39,8 @@ class OutingAssignmentDialog(QDialog):
         self.available_list = QListWidget()
         self.selected_list = QListWidget()
 
-        self.available_list.setSelectionMode(QAbstractItemView.ExtendedSelection)
-        self.selected_list.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        self.available_list.setSelectionMode(SelectionMode.ExtendedSelection)
+        self.selected_list.setSelectionMode(SelectionMode.ExtendedSelection)
 
         self.add_button = QPushButton("Add →")
         self.remove_button = QPushButton("← Remove")
@@ -153,7 +160,7 @@ class OutingAssignmentDialog(QDialog):
 
         for row in filtered:
             item = QListWidgetItem(self._member_display_name(row))
-            item.setData(Qt.UserRole, int(row["id"]))
+            item.setData(DataRole.UserRole, int(row["id"]))
             self.available_list.addItem(item)
 
     def refresh_selected_members(self):
@@ -168,7 +175,7 @@ class OutingAssignmentDialog(QDialog):
 
         for idx, row in enumerate(selected_rows, start=1):
             item = QListWidgetItem(f"{idx}. {self._member_display_name(row)}")
-            item.setData(Qt.UserRole, int(row["id"]))
+            item.setData(DataRole.UserRole, int(row["id"]))
             self.selected_list.addItem(item)
 
         self.selected_label.setText(f"Selected Players: {len(selected_rows)}")
@@ -184,7 +191,7 @@ class OutingAssignmentDialog(QDialog):
         added_count = 0
 
         for item in items:
-            member_id = int(item.data(Qt.UserRole))
+            member_id = int(item.data(DataRole.UserRole))
 
             if capacity is not None and current_selected >= capacity:
                 if added_count == 0:
@@ -215,7 +222,7 @@ class OutingAssignmentDialog(QDialog):
             return
 
         for item in items:
-            member_id = int(item.data(Qt.UserRole))
+            member_id = int(item.data(DataRole.UserRole))
             self.selected_member_ids_set.discard(member_id)
 
         self.refresh_available_members()
@@ -227,7 +234,7 @@ class OutingAssignmentDialog(QDialog):
 
         capacity = self._get_capacity()
         current_selected = len(self.selected_member_ids_set)
-        member_id = int(item.data(Qt.UserRole))
+        member_id = int(item.data(DataRole.UserRole))
 
         if capacity is not None and current_selected >= capacity:
             QMessageBox.warning(
@@ -247,7 +254,7 @@ class OutingAssignmentDialog(QDialog):
         if not item:
             return
 
-        member_id = int(item.data(Qt.UserRole))
+        member_id = int(item.data(DataRole.UserRole))
         self.selected_member_ids_set.discard(member_id)
 
         self.refresh_available_members()
@@ -260,7 +267,7 @@ class OutingAssignmentDialog(QDialog):
 
         for i in range(self.available_list.count()):
             item = self.available_list.item(i)
-            member_id = int(item.data(Qt.UserRole))
+            member_id = int(item.data(DataRole.UserRole))
 
             if capacity is not None and current_selected >= capacity:
                 break
