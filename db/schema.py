@@ -192,6 +192,53 @@ CREATE TABLE IF NOT EXISTS email_logs (
     FOREIGN KEY (outing_id) REFERENCES outings(id)
 );
 
+CREATE TABLE IF NOT EXISTS email_templates (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    course_id INTEGER,
+    audience_type TEXT NOT NULL CHECK(audience_type IN ('member', 'course')),
+    template_type TEXT NOT NULL CHECK(
+        template_type IN (
+            'invitation',
+            'pairings',
+            'revised_pairings',
+            'course_hold_request',
+            'course_final_schedule'
+        )
+    ),
+    subject_template TEXT NOT NULL,
+    body_text_template TEXT NOT NULL,
+    body_html_template TEXT,
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(course_id, audience_type, template_type),
+    FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS outing_email_drafts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    outing_id INTEGER NOT NULL,
+    audience_type TEXT NOT NULL CHECK(audience_type IN ('member', 'course')),
+    template_type TEXT NOT NULL CHECK(
+        template_type IN (
+            'invitation',
+            'pairings',
+            'revised_pairings',
+            'course_hold_request',
+            'course_final_schedule'
+        )
+    ),
+    subject_text TEXT NOT NULL,
+    body_text TEXT NOT NULL,
+    body_html TEXT,
+    status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft', 'sent')),
+    sent_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(outing_id, audience_type, template_type),
+    FOREIGN KEY (outing_id) REFERENCES outings(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS audit_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER,
