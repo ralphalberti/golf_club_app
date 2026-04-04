@@ -187,6 +187,8 @@ class MainWindow(QMainWindow):
         refresh_btn = QPushButton("Refresh Assignments")
         export_btn = QPushButton("Export PDF / CSV")
         rsvp_btn = QPushButton("Manage RSVP")
+        invite_btn = QPushButton("Send Invitations")
+        preview_invite_btn = QPushButton("Preview Invitations")
 
         create_btn.clicked.connect(self.add_outing)
         edit_btn.clicked.connect(self.edit_outing)
@@ -197,16 +199,20 @@ class MainWindow(QMainWindow):
         refresh_btn.clicked.connect(self.refresh_assignments)
         export_btn.clicked.connect(self.export_outputs)
         rsvp_btn.clicked.connect(self.manage_rsvp)
+        invite_btn.clicked.connect(self.send_invitations)
+        preview_invite_btn.clicked.connect(self.preview_invitations)
 
         buttons.addWidget(create_btn)
         buttons.addWidget(edit_btn)
         buttons.addWidget(delete_btn)
+        buttons.addWidget(preview_invite_btn)
         buttons.addWidget(rsvp_btn)
         buttons.addWidget(gen_btn)
         buttons.addWidget(edit_schedule_btn)
         buttons.addWidget(remove_player_btn)
         buttons.addWidget(refresh_btn)
         buttons.addWidget(export_btn)
+        buttons.addWidget(invite_btn)
         buttons.addStretch()
 
         layout.addLayout(buttons)
@@ -1008,3 +1014,58 @@ class MainWindow(QMainWindow):
         self.load_outings()
         self.select_outing_row_by_id(outing_id)
         self.refresh_assignments()
+
+    def send_invitations(self):
+        outing_id = self.selected_row_id(self.outings_table)
+        if not outing_id:
+            QMessageBox.warning(self, "No selection", "Select an outing first.")
+            return
+
+        outing = self.outing_service.get_outing(outing_id)
+
+        members = self.member_service.list_members(active_only=True)
+
+        try:
+            self.distribution_service.send_invitation_emails(outing, members)
+
+            self.rsvp_service.invite_all_active_members(outing_id)
+            self.rsvp_service.set_outing_workflow_stage(outing_id, "invites_sent")
+
+            QMessageBox.information(
+                self,
+                "Invitations Sent",
+                "Invitation emails have been sent to all members.",
+            )
+
+        except Exception as exc:
+            QMessageBox.critical(
+                self,
+                "Send Failed",
+                f"Could not send invitations.\n\n{exc}",
+            )
+
+    def preview_invitations(self):
+        outing_id = self.selected_row_id(self.outings_table)
+        if not outing_id:
+            QMessageBox.warning(self, "No selection", "Select an outing first.")
+            return
+
+        outing = self.outing_service.get_outing(outing_id)
+        members = self.member_service.list_members(active_only=True)
+
+        try:
+            preview_path = self.distribution_service.preview_invitation_emails_to_file(
+                outing,
+                members,
+            )
+            QMessageBox.information(
+                self,
+                "Invitation Preview Created",
+                f"Preview file written to:\n{preview_path}",
+            )
+        except Exception as exc:
+            QMessageBox.critical(
+                self,
+                "Preview Failed",
+                f"Could not build invitation preview.\n\n{exc}",
+            )
