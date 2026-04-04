@@ -391,6 +391,7 @@ class OutingRSVPDialog(QDialog):
                     status,
                 )
             self.load_data()
+            self._warn_if_schedule_invalid_after_guest_change()
         except Exception as exc:
             QMessageBox.warning(
                 self,
@@ -422,6 +423,7 @@ class OutingRSVPDialog(QDialog):
             for member_id in member_ids:
                 self.rsvp_service.remove_member_rsvp(self.outing_id, member_id)
             self.load_data()
+            self._warn_if_schedule_invalid_after_guest_change()
         except Exception as exc:
             QMessageBox.warning(
                 self,
@@ -528,6 +530,7 @@ class OutingRSVPDialog(QDialog):
                 status=status,
             )
             self.load_data()
+            self._warn_if_schedule_invalid_after_guest_change()
         except Exception as exc:
             QMessageBox.warning(
                 self,
@@ -571,6 +574,7 @@ class OutingRSVPDialog(QDialog):
                     status,
                 )
             self.load_data()
+            self._warn_if_schedule_invalid_after_guest_change()
         except Exception as exc:
             QMessageBox.warning(
                 self,
@@ -602,6 +606,7 @@ class OutingRSVPDialog(QDialog):
             for guest_id in guest_ids:
                 self.guest_service.remove_guest_from_outing(self.outing_id, guest_id)
             self.load_data()
+            self._warn_if_schedule_invalid_after_guest_change()
         except Exception as exc:
             QMessageBox.warning(
                 self,
@@ -665,3 +670,23 @@ class OutingRSVPDialog(QDialog):
         )
 
         self.load_guests()
+
+    def _warn_if_schedule_invalid_after_guest_change(self):
+        try:
+            self.outing_service.validate_existing_schedule(self.outing_id)
+        except Exception as exc:
+            try:
+                self.rsvp_service.set_outing_workflow_stage(
+                    self.outing_id,
+                    "schedule_revised",
+                )
+            except Exception:
+                pass
+
+            QMessageBox.warning(
+                self,
+                "Schedule Needs Revision",
+                "This guest change makes the current schedule invalid.\n\n"
+                "Please regenerate or revise the schedule.\n\n"
+                f"Details: {exc}",
+            )

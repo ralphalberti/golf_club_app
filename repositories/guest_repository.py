@@ -227,3 +227,43 @@ class GuestRepository(BaseRepository):
                 """,
                 (outing_id,),
             ).fetchall()
+
+    # def get_guests_for_outing_and_sponsor(
+    #     self,
+    #     outing_id: int,
+    #     sponsoring_member_id: int,
+    # ):
+    #     query = """
+    #         SELECT g.*
+    #         FROM guests g
+    #         JOIN outing_guests og ON og.guest_id = g.id
+    #         WHERE og.outing_id = ?
+    #           AND og.sponsoring_member_id = ?
+    #         ORDER BY g.last_name, g.first_name
+    #     """
+    #     return self.fetchall(query, (outing_id, sponsoring_member_id))
+
+    def get_guests_for_outing_and_sponsor(
+        self,
+        outing_id: int,
+        sponsoring_member_id: int,
+    ):
+        with self.db.get_conn() as conn:
+            return conn.execute(
+                """
+                SELECT
+                    g.id,
+                    g.first_name,
+                    g.last_name,
+                    g.email,
+                    g.phone,
+                    g.notes,
+                    g.active
+                FROM guests g
+                JOIN outing_guests og ON og.guest_id = g.id
+                WHERE og.outing_id = ?
+                  AND og.sponsoring_member_id = ?
+                ORDER BY g.last_name, g.first_name
+                """,
+                (outing_id, sponsoring_member_id),
+            ).fetchall()

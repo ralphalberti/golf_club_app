@@ -74,3 +74,6 @@ class OutingService:
 
     def reshuffle_schedule(self, outing_id: int):
         return self.scheduling_service.reshuffle_schedule(outing_id)
+
+    def validate_existing_schedule(self, outing_id: int) -> None:
+        self.scheduling_service.validate_existing_schedule(outing_id)

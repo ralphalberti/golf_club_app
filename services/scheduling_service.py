@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import random
+from collections.abc import Mapping
 
 from repositories.member_repository import MemberRepository
 from repositories.outing_repository import OutingRepository
 from services.pairing_service import PairingService
 from services.rotation_service import RotationService
-from services.scheduler_units import SchedulingUnitService
+from services.scheduler_units import SchedulingUnit, SchedulingUnitService
 from services.settings_service import SettingsService
 
 
@@ -138,7 +139,7 @@ class SchedulingService:
         enforce_units: bool = False,
         enforced_member_ids: list[int] | None = None,
     ) -> list[list[int]]:
-        best_groups = None
+        best_groups: list[list[int]] | None = None
         best_score = float("inf")
 
         for _ in range(max(1, attempts)):
@@ -286,7 +287,8 @@ class SchedulingService:
                 score += current_size * 0.5
                 score += self._tier_balance_penalty(candidate_group, member_map)
                 score += self._projected_group_shape_penalty(
-                    projected_size, max_players
+                    projected_size,
+                    max_players,
                 )
 
                 if randomized:
@@ -749,7 +751,11 @@ class SchedulingService:
         indexed_groups.sort(key=lambda item: (expanded_sizes[item[0]], item[0]))
         return [group for _, group in indexed_groups]
 
-    def _unit_size_for_member(self, member_id: int, unit_map: dict[int, object]) -> int:
+    def _unit_size_for_member(
+        self,
+        member_id: int,
+        unit_map: Mapping[int, SchedulingUnit],
+    ) -> int:
         unit = unit_map.get(int(member_id))
         if unit is None:
             return 1
@@ -758,7 +764,7 @@ class SchedulingService:
     def _expanded_group_size(
         self,
         group: list[int],
-        unit_map: dict[int, object],
+        unit_map: Mapping[int, SchedulingUnit],
     ) -> int:
         return sum(
             self._unit_size_for_member(member_id, unit_map) for member_id in group
@@ -780,7 +786,7 @@ class SchedulingService:
     def _per_group_fill_penalty(
         self,
         group: list[int],
-        unit_map: dict[int, object],
+        unit_map: Mapping[int, SchedulingUnit],
     ) -> float:
         size = self._expanded_group_size(group, unit_map)
 
@@ -797,7 +803,7 @@ class SchedulingService:
     def _shuffle_preserving_unit_size_priority(
         self,
         ordered_members: list[int],
-        unit_map: dict[int, object],
+        unit_map: Mapping[int, SchedulingUnit],
     ) -> list[int]:
         buckets: dict[int, list[int]] = {}
 
@@ -812,3 +818,51 @@ class SchedulingService:
             shuffled.extend(bucket)
 
         return shuffled
+
+    def validate_existing_schedule(self, outing_id: int) -> None:
+        """
+        Validate the currently saved schedule for an outing against:
+        - current member activity
+        - tier constraints
+        - duplicate assignments
+        - expanded sponsor+guest unit sizes
+
+        Raises ValueError if the saved schedule is no longer valid.
+        """
+        assignments = self.outing_repo.get_assignments(outing_id)
+        if not assignments:
+            return
+
+        tee_times = self.outing_repo.get_tee_times(outing_id)
+        if not tee_times:
+            raise ValueError("No tee times found for outing.")
+
+        member_ids: list[int] = []
+        seen: set[int] = set()
+
+        for row in assignments:
+            member_id = int(row["member_id"])
+            if member_id not in seen:
+                seen.add(member_id)
+                member_ids.append(member_id)
+
+        if not member_ids:
+            return
+
+        member_map = self._get_member_map(member_ids)
+        current_groups = self._groups_from_assignments(assignments, tee_times)
+
+        self._validate_final_groups(
+            outing_id=outing_id,
+            groups=current_groups,
+            tee_times=tee_times,
+            member_map=member_map,
+            expected_member_ids=member_ids,
+            enforced_member_ids=member_ids,
+        )
+
+        self.unit_service.validate_expanded_groups_for_member_ids(
+            outing_id=outing_id,
+            sponsor_groups=current_groups,
+            sponsor_member_ids=member_ids,
+        )

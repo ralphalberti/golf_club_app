@@ -49,8 +49,8 @@ def bootstrap_and_run() -> None:
     settings_service = SettingsService(db)
     rsvp_service = RSVPService(db)
     guest_service = GuestService(db)
-    pdf_service = PdfService()
-    export_service = ExportService()
+    pdf_service = PdfService(db)
+    export_service = ExportService(db)
     email_service = EmailService(db)
     distribution_service = DistributionService(
         db=db,
