@@ -28,6 +28,7 @@ data/
 exports/pdf/
 exports/csv/
 exports/archive/
+exports/preview/
 
 # OS crash/core files
 core
