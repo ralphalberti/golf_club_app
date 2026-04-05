@@ -34,7 +34,7 @@ def seed_email_templates(db) -> None:
             "course_id": None,
             "audience_type": "member",
             "template_type": "invitation",
-            "subject_template": "Del Webb Monday Golf: {{course_name}} {{outing_date}}",
+            "subject_template": "Del Webb Golf: {{course_name}} {{outing_date}}",
             "body_text_template": (
                 "Golfers,\n\n"
                 "We play at {{course_name}} next {{outing_date}}. "
@@ -50,7 +50,7 @@ def seed_email_templates(db) -> None:
             "course_id": None,
             "audience_type": "member",
             "template_type": "pairings",
-            "subject_template": "Del Webb Monday Golf: Pairings for {{outing_date}}",
+            "subject_template": "Del Webb Golf: Pairings for {{outing_date}}",
             "body_text_template": (
                 "Golfers,\n\n"
                 "Here are the pairings for {{outing_date}} @ {{course_name}}. "
@@ -63,7 +63,7 @@ def seed_email_templates(db) -> None:
             "course_id": None,
             "audience_type": "member",
             "template_type": "revised_pairings",
-            "subject_template": "Del Webb Monday Golf: Revised Pairings for {{outing_date}}",
+            "subject_template": "Del Webb Golf: Revised Pairings for {{outing_date}}",
             "body_text_template": (
                 "Golfers,\n\n"
                 "Here are the revised pairings for {{outing_date}} @ {{course_name}}. "

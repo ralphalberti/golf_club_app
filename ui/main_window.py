@@ -1,5 +1,5 @@
 from PyQt5.QtCore import Qt, QTimer
-from PyQt5.QtGui import QBrush, QColor, QFont
+from PyQt5.QtGui import QBrush, QColor, QFont, QResizeEvent
 from PyQt5.QtWidgets import (
     QAction,
     QFileDialog,
@@ -21,6 +21,7 @@ from ui.schedule_editor_dialog import ScheduleEditorDialog
 from ui.settings_dialog import SettingsDialog
 from ui.shared.forms import MemberFormDialog, CourseFormDialog, OutingFormDialog
 from ui.outing_rsvp_dialog import OutingRSVPDialog
+from ui.email_draft_dialog import EmailDraftDialog
 
 Align = Qt.AlignmentFlag
 DataRole = Qt.ItemDataRole
@@ -42,6 +43,7 @@ class MainWindow(QMainWindow):
         settings_service,
         rsvp_service,
         guest_service,
+        outing_email_draft_service,
     ):
         super().__init__()
 
@@ -56,6 +58,7 @@ class MainWindow(QMainWindow):
         self.settings_service = settings_service
         self.rsvp_service = rsvp_service
         self.guest_service = guest_service
+        self.outing_email_draft_service = outing_email_draft_service
 
         # Window setup
         self.setWindowTitle(APP_NAME)
@@ -102,6 +105,7 @@ class MainWindow(QMainWindow):
 
     def _build_menu_bar(self):
         menu_bar = self.menuBar()
+        assert menu_bar is not None
 
         file_menu = menu_bar.addMenu("File")
         tools_menu = menu_bar.addMenu("Tools")
@@ -114,7 +118,7 @@ class MainWindow(QMainWindow):
         file_menu.addSeparator()
 
         quit_action = QAction("Quit", self)
-        quit_action.triggered.connect(self.close)
+        quit_action.triggered.connect(lambda: self.close())
         file_menu.addAction(quit_action)
 
         settings_action = QAction("Settings", self)
@@ -189,6 +193,7 @@ class MainWindow(QMainWindow):
         rsvp_btn = QPushButton("Manage RSVP")
         invite_btn = QPushButton("Send Invitations")
         preview_invite_btn = QPushButton("Preview Invitations")
+        edit_email_btn = QPushButton("Edit Email Draft")
 
         create_btn.clicked.connect(self.add_outing)
         edit_btn.clicked.connect(self.edit_outing)
@@ -201,6 +206,7 @@ class MainWindow(QMainWindow):
         rsvp_btn.clicked.connect(self.manage_rsvp)
         invite_btn.clicked.connect(self.send_invitations)
         preview_invite_btn.clicked.connect(self.preview_invitations)
+        edit_email_btn.clicked.connect(self.open_email_draft_dialog)
 
         buttons.addWidget(create_btn)
         buttons.addWidget(edit_btn)
@@ -218,6 +224,7 @@ class MainWindow(QMainWindow):
         layout.addLayout(buttons)
         layout.addWidget(self.outings_table)
         layout.addWidget(self.assignments_table)
+        layout.addWidget(edit_email_btn)
         return widget
 
     def refresh_all(self):
@@ -945,8 +952,8 @@ class MainWindow(QMainWindow):
         table.setColumnWidth(3, other_width)
         table.setColumnWidth(4, notes_width)
 
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
+    def resizeEvent(self, a0: QResizeEvent) -> None:
+        super().resizeEvent(a0)
         self._resize_outings_table_columns()
 
     def _on_tab_changed(self, index):
@@ -1069,3 +1076,23 @@ class MainWindow(QMainWindow):
                 "Preview Failed",
                 f"Could not build invitation preview.\n\n{exc}",
             )
+
+    def open_email_draft_dialog(self):
+        outing_id = self.selected_row_id(self.outings_table)
+        if not outing_id:
+            QMessageBox.warning(self, "No Selection", "Select an outing first.")
+            return
+
+        outing = self.outing_service.get_outing(outing_id)
+        if not outing:
+            QMessageBox.warning(
+                self, "Outing Not Found", "Could not load the selected outing."
+            )
+            return
+
+        dialog = EmailDraftDialog(
+            outing,
+            self.outing_email_draft_service,
+            self,
+        )
+        dialog.exec_()

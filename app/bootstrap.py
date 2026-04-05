@@ -23,6 +23,7 @@ from services.export_service import ExportService
 from services.pdf_service import PdfService
 from services.email_service import EmailService
 from services.distribution_service import DistributionService
+from services.outing_email_draft_service import OutingEmailDraftService
 from ui.login_dialog import LoginDialog
 from ui.main_window import MainWindow
 
@@ -52,6 +53,8 @@ def bootstrap_and_run() -> None:
     pdf_service = PdfService(db)
     export_service = ExportService(db)
     email_service = EmailService(db)
+    outing_email_draft_service = OutingEmailDraftService(db)
+
     distribution_service = DistributionService(
         db=db,
         pdf_service=pdf_service,
@@ -78,6 +81,7 @@ def bootstrap_and_run() -> None:
         settings_service=settings_service,
         rsvp_service=rsvp_service,
         guest_service=guest_service,
+        outing_email_draft_service=outing_email_draft_service,
     )
     window.show()
     sys.exit(app.exec_())
