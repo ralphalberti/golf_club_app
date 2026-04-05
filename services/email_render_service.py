@@ -4,6 +4,7 @@ from typing import TypedDict
 
 from services.outing_service import OutingService
 from services.settings_service import SettingsService
+from services.schedule_render_service import ScheduleRenderService
 
 
 class RenderedEmailDraft(TypedDict):
@@ -26,6 +27,7 @@ class EmailRenderService:
         self.db = db
         self.outing_service = OutingService(db)
         self.settings_service = SettingsService(db)
+        self.schedule_render_service = ScheduleRenderService(db)
 
     def render(
         self,
@@ -38,11 +40,26 @@ class EmailRenderService:
         if not outing:
             raise ValueError(f"Outing not found: {outing_id}")
 
+        # ✅ Step 1 — build base context
         context = self.build_context(outing, extra_context=extra_context)
 
+        # ✅ Step 2 — inject schedule BEFORE rendering templates
+        tee_times = self.outing_service.get_tee_times(outing_id)
+        assignments = self.outing_service.get_assignments(outing_id)
+
+        schedule_text = self.schedule_render_service.render_text(
+            outing_id=outing_id,
+            tee_times=tee_times,
+            assignments=assignments,
+        )
+
+        context["schedule_text"] = schedule_text
+
+        # ✅ Step 3 — now render templates (with schedule included)
         subject = self._render_text(
             str(template_row["subject_template"] or ""), context
         )
+
         body_text = self._render_text(
             str(template_row["body_text_template"] or ""),
             context,
@@ -53,6 +70,7 @@ class EmailRenderService:
         if body_html_template:
             body_html = self._render_text(str(body_html_template), context)
 
+        # ✅ Step 4 — return result
         return {
             "subject_text": subject,
             "body_text": body_text,

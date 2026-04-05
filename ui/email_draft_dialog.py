@@ -10,10 +10,20 @@ from PyQt5.QtWidgets import (
     QMessageBox,
 )
 
-from services.outing_email_draft_service import OutingEmailDraftService
-
 
 class EmailDraftDialog(QDialog):
+    TEMPLATE_OPTIONS = {
+        "member": [
+            "invitation",
+            "pairings",
+            "revised_pairings",
+        ],
+        "course": [
+            "course_hold_request",
+            "course_final_schedule",
+        ],
+    }
+
     def __init__(self, outing_row, draft_service, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Email Draft Editor")
@@ -27,47 +37,36 @@ class EmailDraftDialog(QDialog):
     def _build_ui(self):
         layout = QVBoxLayout()
 
-        # --- Top selectors ---
         selector_layout = QHBoxLayout()
 
         selector_layout.addWidget(QLabel("Audience:"))
         self.audience_combo = QComboBox()
         self.audience_combo.addItems(["member", "course"])
+        self.audience_combo.currentTextChanged.connect(self._on_audience_changed)
         selector_layout.addWidget(self.audience_combo)
 
         selector_layout.addWidget(QLabel("Template:"))
         self.template_combo = QComboBox()
-        self.template_combo.addItems(
-            [
-                "invitation",
-                "pairings",
-                "revised_pairings",
-                "course_hold_request",
-                "course_final_schedule",
-            ]
-        )
+        self._update_template_options("member")
         selector_layout.addWidget(self.template_combo)
 
         layout.addLayout(selector_layout)
 
-        # --- Subject ---
         layout.addWidget(QLabel("Subject:"))
         self.subject_input = QLineEdit()
         layout.addWidget(self.subject_input)
 
-        # --- Body ---
         layout.addWidget(QLabel("Body:"))
         self.body_input = QTextEdit()
         layout.addWidget(self.body_input)
 
-        # --- Buttons ---
         button_layout = QHBoxLayout()
 
-        self.load_btn = QPushButton("Load / Generate")
+        self.load_btn = QPushButton("Load Existing / Create New")
         self.load_btn.clicked.connect(self.load_or_generate)
         button_layout.addWidget(self.load_btn)
 
-        self.regen_btn = QPushButton("Regenerate")
+        self.regen_btn = QPushButton("Rebuild From Template")
         self.regen_btn.clicked.connect(self.regenerate)
         button_layout.addWidget(self.regen_btn)
 
@@ -76,16 +75,20 @@ class EmailDraftDialog(QDialog):
         button_layout.addWidget(self.save_btn)
 
         self.close_btn = QPushButton("Close")
-        self.close_btn.clicked.connect(self.close)
+        self.close_btn.clicked.connect(self._close_dialog)
         button_layout.addWidget(self.close_btn)
 
         layout.addLayout(button_layout)
 
         self.setLayout(layout)
 
-    # -------------------------
-    # Actions
-    # -------------------------
+    def _update_template_options(self, audience: str):
+        self.template_combo.clear()
+        options = self.TEMPLATE_OPTIONS.get(audience, [])
+        self.template_combo.addItems(options)
+
+    def _on_audience_changed(self, audience: str):
+        self._update_template_options(audience)
 
     def load_or_generate(self):
         try:
@@ -139,3 +142,6 @@ class EmailDraftDialog(QDialog):
 
         except Exception as e:
             QMessageBox.critical(self, "Error", str(e))
+
+    def _close_dialog(self) -> None:
+        self.close()
