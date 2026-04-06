@@ -23,12 +23,20 @@ class OutingRepository(BaseRepository):
     def create(self, data: dict) -> int:
         now = now_iso()
         with self.db.get_conn() as conn:
+            fee_value = data.get("fee")
+            if fee_value in (None, ""):
+                fee_value = self._lookup_fee_snapshot(
+                    conn,
+                    data["course_id"],
+                    data["outing_date"],
+                )
+
             cur = conn.execute(
                 """
                 INSERT INTO outings
                 (outing_date, course_id, start_time, tee_interval_minutes, tee_time_count,
-                 max_players_per_tee_time, status, version, notes, created_by, updated_by, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 max_players_per_tee_time, status, version, notes, fee, created_by, updated_by, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     data["outing_date"],
@@ -40,6 +48,7 @@ class OutingRepository(BaseRepository):
                     data.get("status", "draft"),
                     data.get("version", 1),
                     data.get("notes", ""),
+                    fee_value,
                     data.get("created_by"),
                     data.get("updated_by"),
                     now,
@@ -47,16 +56,27 @@ class OutingRepository(BaseRepository):
                 ),
             )
             outing_id = cur.lastrowid
-            self._rebuild_tee_times(conn, outing_id)
-            return outing_id
+            if outing_id is None:
+                raise RuntimeError("Failed to create outing.")
+
+            self._rebuild_tee_times(conn, int(outing_id))
+            return int(outing_id)
 
     def update(self, outing_id: int, data: dict) -> None:
         with self.db.get_conn() as conn:
+            fee_value = data.get("fee")
+            if fee_value in (None, ""):
+                fee_value = self._lookup_fee_snapshot(
+                    conn,
+                    data["course_id"],
+                    data["outing_date"],
+                )
+
             conn.execute(
                 """
                 UPDATE outings
                 SET outing_date=?, course_id=?, start_time=?, tee_interval_minutes=?, tee_time_count=?,
-                    max_players_per_tee_time=?, status=?, version=?, notes=?, updated_by=?, updated_at=?
+                    max_players_per_tee_time=?, status=?, version=?, notes=?, fee=?, updated_by=?, updated_at=?
                 WHERE id=?
                 """,
                 (
@@ -69,12 +89,29 @@ class OutingRepository(BaseRepository):
                     data.get("status", "draft"),
                     data.get("version", 1),
                     data.get("notes", ""),
+                    fee_value,
                     data.get("updated_by"),
                     now_iso(),
                     outing_id,
                 ),
             )
             self._rebuild_tee_times(conn, outing_id)
+
+    def _lookup_fee_snapshot(self, conn, course_id: int, outing_date: str):
+        row = conn.execute(
+            """
+            SELECT fee
+            FROM course_fee_schedules
+            WHERE course_id = ?
+              AND effective_start_date <= ?
+              AND effective_end_date >= ?
+            ORDER BY effective_start_date DESC, effective_end_date DESC
+            LIMIT 1
+            """,
+            (course_id, outing_date, outing_date),
+        ).fetchone()
+
+        return row["fee"] if row else None
 
     def _rebuild_tee_times(self, conn, outing_id: int) -> None:
         outing = conn.execute(
@@ -251,4 +288,7 @@ class OutingRepository(BaseRepository):
                 """,
                 (tee_time_id, member_id, player_order_in_group, "scheduled", 0),
             )
-            return cur.lastrowid
+            assignment_id = cur.lastrowid
+            if assignment_id is None:
+                raise RuntimeError("Failed to add assignment.")
+            return int(assignment_id)

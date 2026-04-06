@@ -89,7 +89,7 @@ class EmailRenderService:
         if fee_value in (None, ""):
             green_fee = ""
         else:
-            green_fee = f"${fee_value}"
+            green_fee = f"${float(fee_value):.2f}"
 
         context: dict[str, str] = {
             "club_name": str(settings.get("club_name", "") or ""),
