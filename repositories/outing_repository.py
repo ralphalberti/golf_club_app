@@ -292,3 +292,17 @@ class OutingRepository(BaseRepository):
             if assignment_id is None:
                 raise RuntimeError("Failed to add assignment.")
             return int(assignment_id)
+
+    def delete_rounds_by_outing(self, outing_id: int) -> None:
+        with self.db.get_conn() as conn:
+            conn.execute(
+                "DELETE FROM rounds WHERE outing_id = ?",
+                (outing_id,),
+            )
+
+    def delete_email_logs_by_outing(self, outing_id: int) -> None:
+        with self.db.get_conn() as conn:
+            conn.execute(
+                "DELETE FROM email_logs WHERE outing_id = ?",
+                (outing_id,),
+            )

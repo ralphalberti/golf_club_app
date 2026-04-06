@@ -37,6 +37,8 @@ class OutingService:
         self.repo.delete_assignment(assignment_id)
 
     def delete_outing(self, outing_id: int) -> None:
+        self.repo.delete_rounds_by_outing(outing_id)
+        self.repo.delete_email_logs_by_outing(outing_id)
         self.repo.delete_assignments_by_outing(outing_id)
         self.repo.delete_tee_times_by_outing(outing_id)
         self.repo.delete_outing(outing_id)
