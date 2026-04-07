@@ -55,6 +55,13 @@ class EmailRenderService:
 
         context["schedule_text"] = schedule_text
 
+        schedule_html = self.schedule_render_service.render_html(
+            outing_id=outing_id,
+            tee_times=tee_times,
+            assignments=assignments,
+        )
+        context["schedule_html"] = schedule_html
+
         # ✅ Step 3 — now render templates (with schedule included)
         subject = self._render_text(
             str(template_row["subject_template"] or ""), context

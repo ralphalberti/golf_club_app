@@ -58,6 +58,13 @@ def seed_email_templates(db) -> None:
                 "{{schedule_text}}\n\n"
                 "--{{sender_name}}"
             ),
+            "body_html_template": (
+                "<p>Golfers,</p>"
+                "<p>Here are the pairings for {{outing_date}} @ {{course_name}}. "
+                "Please arrive at least 30 minutes prior to tee time.</p>"
+                "{{schedule_html}}"
+                "<p>--{{sender_name}}</p>"
+            ),
         },
         {
             "course_id": None,
@@ -70,6 +77,13 @@ def seed_email_templates(db) -> None:
                 "Please arrive at least 30 minutes prior to tee time.\n\n"
                 "{{schedule_text}}\n\n"
                 "--{{sender_name}}"
+            ),
+            "body_html_template": (
+                "<p>Golfers,</p>"
+                "<p>Here are the revised pairings for {{outing_date}} @ {{course_name}}. "
+                "Please arrive at least 30 minutes prior to tee time.</p>"
+                "{{schedule_html}}"
+                "<p>--{{sender_name}}</p>"
             ),
         },
         {
@@ -91,6 +105,10 @@ def seed_email_templates(db) -> None:
             "body_text_template": (
                 "Here are the pairings for the 18 hole course this week.\n\n"
                 "{{schedule_text}}"
+            ),
+            "body_html_template": (
+                "<p>Here are the pairings for the 18 hole course this week.</p>"
+                "{{schedule_html}}"
             ),
         },
     ]
@@ -132,7 +150,7 @@ def seed_email_templates(db) -> None:
                     template["template_type"],
                     template["subject_template"],
                     template["body_text_template"],
-                    None,
+                    template.get("body_html_template"),
                     now,
                     now,
                 ),

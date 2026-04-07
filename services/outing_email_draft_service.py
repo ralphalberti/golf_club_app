@@ -1,6 +1,10 @@
 from repositories.outing_email_draft_repository import OutingEmailDraftRepository
+from repositories.member_repository import MemberRepository
+from repositories.course_repository import CourseRepository
 from services.email_template_service import EmailTemplateService
 from services.email_render_service import EmailRenderService
+from services.email_service import EmailService
+from services.outing_service import OutingService
 
 
 class OutingEmailDraftService:
@@ -17,6 +21,10 @@ class OutingEmailDraftService:
         self.repo = OutingEmailDraftRepository(db)
         self.template_service = EmailTemplateService(db)
         self.render_service = EmailRenderService(db)
+        self.member_repo = MemberRepository(db)
+        self.course_repo = CourseRepository(db)
+        self.outing_service = OutingService(db)
+        self.email_service = EmailService(db)
 
     def get_draft(
         self,
@@ -163,3 +171,70 @@ class OutingEmailDraftService:
 
         if template_type not in self.VALID_TEMPLATE_TYPES:
             raise ValueError(f"Invalid template_type: {template_type}")
+
+    def send_draft(
+        self,
+        *,
+        outing_id: int,
+        audience_type: str,
+        template_type: str,
+    ) -> int:
+        self._validate_types(audience_type, template_type)
+
+        draft = self.repo.get_draft(outing_id, audience_type, template_type)
+        if not draft:
+            raise ValueError(
+                "No saved draft exists for this outing, audience, and template type."
+            )
+
+        outing = self.outing_service.get_outing(outing_id)
+        if not outing:
+            raise ValueError(f"Outing not found: {outing_id}")
+
+        sent_count = 0
+
+        if audience_type == "member":
+            members = self.member_repo.list_all(active_only=True)
+
+            for member in members:
+                to_email = str(member["email"] or "").strip()
+                if not to_email:
+                    continue
+
+                self.email_service.send_email(
+                    outing_id=outing_id,
+                    to_email=to_email,
+                    subject=str(draft["subject_text"]),
+                    body_text=str(draft["body_text"]),
+                    body_html=draft["body_html"],
+                    attachments=[],
+                    recipient_type="member",
+                )
+                sent_count += 1
+
+        elif audience_type == "course":
+            course_id = int(outing["course_id"])
+            course = self.course_repo.get(course_id)
+            if not course:
+                raise ValueError(f"Course not found: {course_id}")
+
+            to_email = str(course["contact_email"] or "").strip()
+            if not to_email:
+                raise ValueError("Selected course does not have a contact email.")
+
+            self.email_service.send_email(
+                outing_id=outing_id,
+                to_email=to_email,
+                subject=str(draft["subject_text"]),
+                body_text=str(draft["body_text"]),
+                body_html=draft["body_html"],
+                attachments=[],
+                recipient_type="course",
+            )
+            sent_count = 1
+
+        else:
+            raise ValueError(f"Unsupported audience_type: {audience_type}")
+
+        self.repo.mark_sent(outing_id, audience_type, template_type)
+        return sent_count

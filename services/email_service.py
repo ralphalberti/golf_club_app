@@ -20,10 +20,11 @@ class EmailService:
         outing_id: int,
         to_email: str,
         subject: str,
-        body: str,
+        body_text: str,
         attachments: list[Path],
         recipient_type: str = "member",
         bcc_emails: list[str] | None = None,
+        body_html: str | None = None,
     ):
         settings = self._load_settings()
         if not settings["smtp_host"]:
@@ -46,7 +47,10 @@ class EmailService:
         if bcc_emails:
             message["Bcc"] = ", ".join(bcc_emails)
 
-        message.set_content(body)
+        message.set_content(body_text)
+
+        if body_html:
+            message.add_alternative(body_html, subtype="html")
 
         for attachment in attachments:
             data = attachment.read_bytes()

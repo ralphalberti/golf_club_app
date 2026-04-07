@@ -32,6 +32,8 @@ class EmailDraftDialog(QDialog):
         self.outing = outing_row
         self.draft_service = draft_service
 
+        self.current_body_html: str | None = None
+
         self._build_ui()
 
     def _build_ui(self):
@@ -74,6 +76,10 @@ class EmailDraftDialog(QDialog):
         self.save_btn.clicked.connect(self.save_draft)
         button_layout.addWidget(self.save_btn)
 
+        self.send_btn = QPushButton("Send")
+        self.send_btn.clicked.connect(self.send_draft)
+        button_layout.addWidget(self.send_btn)
+
         self.close_btn = QPushButton("Close")
         self.close_btn.clicked.connect(self._close_dialog)
         button_layout.addWidget(self.close_btn)
@@ -105,6 +111,7 @@ class EmailDraftDialog(QDialog):
 
             self.subject_input.setText(draft["subject_text"])
             self.body_input.setPlainText(draft["body_text"])
+            self.current_body_html = draft["body_html"]
 
         except Exception as e:
             QMessageBox.critical(self, "Error", str(e))
@@ -124,6 +131,7 @@ class EmailDraftDialog(QDialog):
 
             self.subject_input.setText(draft["subject_text"])
             self.body_input.setPlainText(draft["body_text"])
+            self.current_body_html = draft["body_html"]
 
         except Exception as e:
             QMessageBox.critical(self, "Error", str(e))
@@ -136,6 +144,7 @@ class EmailDraftDialog(QDialog):
                 template_type=self.template_combo.currentText(),
                 subject_text=self.subject_input.text(),
                 body_text=self.body_input.toPlainText(),
+                body_html=self.current_body_html,
             )
 
             QMessageBox.information(self, "Saved", "Draft saved successfully")
@@ -145,3 +154,29 @@ class EmailDraftDialog(QDialog):
 
     def _close_dialog(self) -> None:
         self.close()
+
+    def send_draft(self):
+        confirm = QMessageBox.question(
+            self,
+            "Send Email",
+            "Send this draft now?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if confirm != QMessageBox.Yes:
+            return
+        try:
+            sent_count = self.draft_service.send_draft(
+                outing_id=int(self.outing["id"]),
+                audience_type=self.audience_combo.currentText(),
+                template_type=self.template_combo.currentText(),
+            )
+
+            QMessageBox.information(
+                self,
+                "Email Sent",
+                f"Sent {sent_count} email(s) successfully.",
+            )
+
+        except Exception as e:
+            QMessageBox.critical(self, "Send Failed", str(e))
