@@ -111,7 +111,7 @@ class RSVPRepository(BaseRepository):
                 SELECT member_id
                 FROM outing_rsvps
                 WHERE outing_id = ? AND status = 'yes'
-                ORDER BY member_id
+                ORDER BY responded_at, member_id
                 """,
                 (outing_id,),
             ).fetchall()
@@ -141,3 +141,67 @@ class RSVPRepository(BaseRepository):
             ).fetchone()
 
         return row["workflow_stage"] if row else None
+
+    def record_yes_if_first(
+        self,
+        outing_id: int,
+        member_id: int,
+        note: str = "",
+    ) -> None:
+        now = now_iso()
+
+        with self.db.get_conn() as conn:
+            existing = conn.execute(
+                """
+                SELECT status, responded_at
+                FROM outing_rsvps
+                WHERE outing_id = ? AND member_id = ?
+                """,
+                (outing_id, member_id),
+            ).fetchone()
+
+            if existing is None:
+                conn.execute(
+                    """
+                    INSERT INTO outing_rsvps (
+                        outing_id,
+                        member_id,
+                        status,
+                        responded_at,
+                        note,
+                        created_at,
+                        updated_at
+                    )
+                    VALUES (?, ?, 'yes', ?, ?, ?, ?)
+                    """,
+                    (outing_id, member_id, now, note, now, now),
+                )
+                return
+
+            existing_status = str(existing["status"] or "")
+            existing_responded_at = existing["responded_at"]
+
+            if existing_status == "yes" and existing_responded_at:
+                conn.execute(
+                    """
+                    UPDATE outing_rsvps
+                    SET note = ?, updated_at = ?
+                    WHERE outing_id = ? AND member_id = ?
+                    """,
+                    (note, now, outing_id, member_id),
+                )
+                return
+
+            responded_at = existing_responded_at or now
+
+            conn.execute(
+                """
+                UPDATE outing_rsvps
+                SET status = 'yes',
+                    responded_at = ?,
+                    note = ?,
+                    updated_at = ?
+                WHERE outing_id = ? AND member_id = ?
+                """,
+                (responded_at, note, now, outing_id, member_id),
+            )

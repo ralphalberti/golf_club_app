@@ -54,3 +54,11 @@ class RSVPService:
         if workflow_stage not in self.VALID_WORKFLOW_STAGES:
             raise ValueError(f"Invalid workflow stage: {workflow_stage}")
         self.repo.update_outing_workflow_stage(outing_id, workflow_stage)
+
+    def record_yes_if_first(
+        self,
+        outing_id: int,
+        member_id: int,
+        note: str = "",
+    ) -> None:
+        self.repo.record_yes_if_first(outing_id, member_id, note)

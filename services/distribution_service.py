@@ -7,6 +7,9 @@ import hmac
 
 from app.config import EXPORT_DIR
 
+from app.config import RSVP_SERVER_HOST, RSVP_SERVER_PORT
+from services.rsvp_token_service import RSVPTokenService
+
 
 class DistributionService:
     def __init__(self, db, pdf_service, export_service, email_service):
@@ -14,6 +17,7 @@ class DistributionService:
         self.pdf_service = pdf_service
         self.export_service = export_service
         self.email_service = email_service
+        self.rsvp_token_service = RSVPTokenService()
 
     def build_outputs(
         self, outing: dict, tee_times: list[dict], assignments: list[dict]
@@ -24,23 +28,12 @@ class DistributionService:
         csv_path = self.export_service.export_course_csv(outing, tee_times, assignments)
         return pdf_path, csv_path
 
-    def _generate_rsvp_token(self, outing_id: int, member_id: int) -> str:
-        secret = "golf-secret-key"
-        payload = f"{outing_id}:{member_id}"
-        signature = hmac.new(
-            secret.encode("utf-8"),
-            payload.encode("utf-8"),
-            hashlib.sha256,
-        ).hexdigest()
-        token = f"{payload}:{signature}"
-        return base64.urlsafe_b64encode(token.encode("utf-8")).decode("utf-8")
-
     def preview_invitation_emails_to_file(
         self,
         outing: dict,
         members: list[dict],
         *,
-        base_url: str = "http://localhost:8000/rsvp/yes",
+        base_url: str = f"http://{RSVP_SERVER_HOST}:{RSVP_SERVER_PORT}/rsvp/yes",
     ) -> Path:
         preview_dir = EXPORT_DIR / "preview"
         preview_dir.mkdir(parents=True, exist_ok=True)
@@ -67,7 +60,10 @@ class DistributionService:
             if not email:
                 continue
 
-            token = self._generate_rsvp_token(int(outing["id"]), int(member["id"]))
+            token = self.rsvp_token_service.create_token(
+                int(outing["id"]),
+                int(member["id"]),
+            )
             rsvp_link = f"{base_url}?token={token}"
 
             body_lines = [
