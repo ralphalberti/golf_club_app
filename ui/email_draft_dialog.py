@@ -105,7 +105,7 @@ class EmailDraftDialog(QDialog):
                 template_type=self.template_combo.currentText(),
                 extra_context={
                     "sender_name": "Ralph",
-                    "rsvp_link": "http://localhost:8000/rsvp/yes?token=test",
+                    "rsvp_link": "{{rsvp_link}}",
                 },
             )
 
@@ -125,7 +125,7 @@ class EmailDraftDialog(QDialog):
                 template_type=self.template_combo.currentText(),
                 extra_context={
                     "sender_name": "Ralph",
-                    "rsvp_link": "http://localhost:8000/rsvp/yes?token=test",
+                    "rsvp_link": "{{rsvp_link}}",
                 },
             )
 

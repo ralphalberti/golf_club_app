@@ -5,6 +5,8 @@ from services.email_template_service import EmailTemplateService
 from services.email_render_service import EmailRenderService
 from services.email_service import EmailService
 from services.outing_service import OutingService
+from services.rsvp_token_service import RSVPTokenService
+from app.config import RSVP_SERVER_HOST, RSVP_SERVER_PORT
 
 
 class OutingEmailDraftService:
@@ -25,6 +27,7 @@ class OutingEmailDraftService:
         self.course_repo = CourseRepository(db)
         self.outing_service = OutingService(db)
         self.email_service = EmailService(db)
+        self.rsvp_token_service = RSVPTokenService()
 
     def get_draft(
         self,
@@ -201,12 +204,29 @@ class OutingEmailDraftService:
                 if not to_email:
                     continue
 
+                member_id = int(member["id"])
+
+                subject_text = str(draft["subject_text"])
+                body_text = str(draft["body_text"])
+                body_html = draft["body_html"]
+
+                if template_type == "invitation":
+                    subject_text, body_text, body_html = (
+                        self._apply_member_placeholders(
+                            subject_text=subject_text,
+                            body_text=body_text,
+                            body_html=body_html,
+                            outing_id=outing_id,
+                            member_id=member_id,
+                        )
+                    )
+
                 self.email_service.send_email(
                     outing_id=outing_id,
                     to_email=to_email,
-                    subject=str(draft["subject_text"]),
-                    body_text=str(draft["body_text"]),
-                    body_html=draft["body_html"],
+                    subject=subject_text,
+                    body_text=body_text,
+                    body_html=body_html,
                     attachments=[],
                     recipient_type="member",
                 )
@@ -238,3 +258,27 @@ class OutingEmailDraftService:
 
         self.repo.mark_sent(outing_id, audience_type, template_type)
         return sent_count
+
+    def _build_member_rsvp_link(self, outing_id: int, member_id: int) -> str:
+        token = self.rsvp_token_service.create_token(outing_id, member_id)
+        return f"http://{RSVP_SERVER_HOST}:{RSVP_SERVER_PORT}/rsvp/yes?token={token}"
+
+    def _apply_member_placeholders(
+        self,
+        *,
+        subject_text: str,
+        body_text: str,
+        body_html: str | None,
+        outing_id: int,
+        member_id: int,
+    ) -> tuple[str, str, str | None]:
+        rsvp_link = self._build_member_rsvp_link(outing_id, member_id)
+
+        rendered_subject = subject_text.replace("{{rsvp_link}}", rsvp_link)
+        rendered_body_text = body_text.replace("{{rsvp_link}}", rsvp_link)
+
+        rendered_body_html: str | None = None
+        if body_html is not None:
+            rendered_body_html = body_html.replace("{{rsvp_link}}", rsvp_link)
+
+        return rendered_subject, rendered_body_text, rendered_body_html
