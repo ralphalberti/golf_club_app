@@ -79,3 +79,9 @@ class OutingService:
 
     def validate_existing_schedule(self, outing_id: int) -> None:
         self.scheduling_service.validate_existing_schedule(outing_id)
+
+    def is_member_assigned_for_outing(self, outing_id: int, member_id: int) -> bool:
+        return self.repo.is_member_assigned_for_outing(outing_id, member_id)
+
+    def get_tee_time_by_id(self, tee_time_id: int):
+        return self.repo.get_tee_time_by_id(tee_time_id)

@@ -261,18 +261,6 @@ class OutingRepository(BaseRepository):
                 (outing_id,),
             ).fetchall()
 
-    def get_tee_time_player_count(self, tee_time_id: int) -> int:
-        with self.db.get_conn() as conn:
-            row = conn.execute(
-                """
-                SELECT COUNT(*) AS player_count
-                FROM tee_time_assignments
-                WHERE tee_time_id = ?
-                """,
-                (tee_time_id,),
-            ).fetchone()
-            return int(row["player_count"]) if row else 0
-
     def add_assignment(
         self,
         tee_time_id: int,
@@ -306,3 +294,41 @@ class OutingRepository(BaseRepository):
                 "DELETE FROM email_logs WHERE outing_id = ?",
                 (outing_id,),
             )
+
+    def is_member_assigned_for_outing(self, outing_id: int, member_id: int) -> bool:
+        with self.db.get_conn() as conn:
+            row = conn.execute(
+                """
+                SELECT COUNT(*) AS count
+                FROM tee_time_assignments a
+                JOIN tee_times t ON t.id = a.tee_time_id
+                WHERE t.outing_id = ? AND a.member_id = ?
+                """,
+                (outing_id, member_id),
+            ).fetchone()
+
+        return int(row["count"]) > 0
+
+    def get_tee_time_by_id(self, tee_time_id: int):
+        with self.db.get_conn() as conn:
+            return conn.execute(
+                """
+                SELECT *
+                FROM tee_times
+                WHERE id = ?
+                """,
+                (tee_time_id,),
+            ).fetchone()
+
+    def get_tee_time_player_count(self, tee_time_id: int) -> int:
+        with self.db.get_conn() as conn:
+            row = conn.execute(
+                """
+                SELECT COUNT(*) AS count
+                FROM tee_time_assignments
+                WHERE tee_time_id = ?
+                """,
+                (tee_time_id,),
+            ).fetchone()
+
+        return int(row["count"])

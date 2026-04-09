@@ -1,3 +1,6 @@
+import html
+import re
+
 from repositories.outing_email_draft_repository import OutingEmailDraftRepository
 from repositories.member_repository import MemberRepository
 from repositories.course_repository import CourseRepository
@@ -6,6 +9,8 @@ from services.email_render_service import EmailRenderService
 from services.email_service import EmailService
 from services.outing_service import OutingService
 from services.rsvp_token_service import RSVPTokenService
+from services.open_slot_token_service import OpenSlotTokenService
+from services.schedule_render_service import ScheduleRenderService
 from app.config import RSVP_SERVER_HOST, RSVP_SERVER_PORT
 
 
@@ -28,6 +33,8 @@ class OutingEmailDraftService:
         self.outing_service = OutingService(db)
         self.email_service = EmailService(db)
         self.rsvp_token_service = RSVPTokenService()
+        self.open_slot_token_service = OpenSlotTokenService()
+        self.schedule_render_service = ScheduleRenderService(db)
 
     def get_draft(
         self,
@@ -221,6 +228,18 @@ class OutingEmailDraftService:
                         )
                     )
 
+                elif template_type in {"pairings", "revised_pairings"}:
+                    personalized_schedule_html = self._apply_member_pairings_html(
+                        draft=draft,
+                        outing_id=outing_id,
+                        member_id=member_id,
+                    )
+
+                    body_html = self._build_pairings_html_from_body_text(
+                        body_text=body_text,
+                        schedule_html=personalized_schedule_html,
+                    )
+
                 self.email_service.send_email(
                     outing_id=outing_id,
                     to_email=to_email,
@@ -282,3 +301,95 @@ class OutingEmailDraftService:
             rendered_body_html = body_html.replace("{{rsvp_link}}", rsvp_link)
 
         return rendered_subject, rendered_body_text, rendered_body_html
+
+    def _build_open_slot_claim_link(
+        self,
+        outing_id: int,
+        member_id: int,
+        tee_time_id: int,
+    ) -> str:
+        token = self.open_slot_token_service.create_token(
+            outing_id,
+            member_id,
+            tee_time_id,
+        )
+        return (
+            f"http://{RSVP_SERVER_HOST}:{RSVP_SERVER_PORT}"
+            f"/claim-open-slot?token={token}"
+        )
+
+    def _apply_member_pairings_html(
+        self,
+        *,
+        draft,
+        outing_id: int,
+        member_id: int,
+    ) -> str | None:
+        tee_times = self.outing_service.get_tee_times(outing_id)
+        assignments = self.outing_service.get_assignments(outing_id)
+
+        return self.schedule_render_service.render_member_claim_html(
+            outing_id=outing_id,
+            member_id=member_id,
+            tee_times=tee_times,
+            assignments=assignments,
+            build_claim_link=self._build_open_slot_claim_link,
+        )
+
+    def _is_schedule_line(self, line: str) -> bool:
+        stripped = line.strip()
+        if not stripped:
+            return False
+
+        return bool(re.match(r"^\d{1,2}:\d{2}\s", stripped))
+
+    def _build_pairings_html_from_body_text(
+        self,
+        *,
+        body_text: str,
+        schedule_html: str,
+    ) -> str:
+        lines = body_text.splitlines()
+
+        intro_lines: list[str] = []
+        signoff_lines: list[str] = []
+        found_schedule = False
+        found_signoff = False
+
+        for line in lines:
+            stripped = line.strip()
+
+            if self._is_schedule_line(line):
+                found_schedule = True
+                continue
+
+            if found_schedule and stripped.startswith("--"):
+                found_signoff = True
+                signoff_lines.append(stripped)
+                continue
+
+            if found_signoff:
+                signoff_lines.append(line)
+            else:
+                intro_lines.append(line)
+
+        intro_text = "\n".join(intro_lines).strip()
+        signoff_text = "\n".join(signoff_lines).strip()
+
+        html_parts: list[str] = []
+
+        if intro_text:
+            intro_html = html.escape(intro_text)
+            intro_html = intro_html.replace("\n\n", "</p><p>")
+            intro_html = intro_html.replace("\n", "<br>")
+            html_parts.append(f"<p>{intro_html}</p>")
+
+        html_parts.append(schedule_html)
+
+        if signoff_text:
+            signoff_html = html.escape(signoff_text)
+            signoff_html = signoff_html.replace("\n\n", "</p><p>")
+            signoff_html = signoff_html.replace("\n", "<br>")
+            html_parts.append(f"<p>{signoff_html}</p>")
+
+        return "".join(html_parts)

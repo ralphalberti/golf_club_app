@@ -5,6 +5,7 @@ from app.config import RSVP_SERVER_HOST, RSVP_SERVER_PORT
 from services.rsvp_service import RSVPService
 from services.rsvp_token_service import RSVPTokenService
 from services.outing_service import OutingService
+from services.open_slot_token_service import OpenSlotTokenService
 from repositories.member_repository import MemberRepository
 
 
@@ -13,17 +14,25 @@ class _RSVPRequestHandler(BaseHTTPRequestHandler):
     token_service: RSVPTokenService | None = None
     outing_service: OutingService | None = None
     member_repo: MemberRepository | None = None
+    open_slot_token_service: OpenSlotTokenService | None = None
 
     def do_GET(self):
         parsed = urlparse(self.path)
 
-        if parsed.path != "/rsvp/yes":
-            self._send_html(
-                404,
-                "<html><body><h1>Not Found</h1></body></html>",
-            )
+        if parsed.path == "/rsvp/yes":
+            self._handle_rsvp_yes(parsed)
             return
 
+        if parsed.path == "/claim-open-slot":
+            self._handle_claim_open_slot(parsed)
+            return
+
+        self._send_html(
+            404,
+            "<html><body><h1>Not Found</h1></body></html>",
+        )
+
+    def _handle_rsvp_yes(self, parsed):
         params = parse_qs(parsed.query)
         token = params.get("token", [""])[0].strip()
 
@@ -69,7 +78,107 @@ class _RSVPRequestHandler(BaseHTTPRequestHandler):
             <html>
               <body style="font-family: Arial, sans-serif; padding: 24px;">
                 <h1>RSVP Error</h1>
-                <p>{str(exc)}</p>
+                <p>{exc.__class__.__name__}: {str(exc)}</p>
+              </body>
+            </html>
+            """
+            self._send_html(400, html)
+
+    def _handle_claim_open_slot(self, parsed):
+        params = parse_qs(parsed.query)
+        token = params.get("token", [""])[0].strip()
+
+        if not token:
+            self._send_html(
+                400,
+                "<html><body><h1>Missing token</h1></body></html>",
+            )
+            return
+
+        try:
+            assert self.open_slot_token_service is not None
+            assert self.rsvp_service is not None
+            assert self.outing_service is not None
+            assert self.member_repo is not None
+
+            outing_id, member_id, tee_time_id = (
+                self.open_slot_token_service.decode_token(token)
+            )
+
+            member = self.member_repo.get(member_id)
+            if not member:
+                raise ValueError("Member not found.")
+
+            if int(member["active"]) != 1:
+                raise ValueError("This member is not active.")
+
+            outing = self.outing_service.get_outing(outing_id)
+            if not outing:
+                raise ValueError("Outing not found.")
+
+            tee_time = self.outing_service.get_tee_time_by_id(tee_time_id)
+            if not tee_time:
+                raise ValueError("Tee time not found.")
+
+            if int(tee_time["outing_id"]) != int(outing_id):
+                raise ValueError("This tee time does not belong to the outing.")
+
+            existing_rsvps = self.rsvp_service.list_member_rsvps_for_outing(outing_id)
+            invited_member_ids = {int(row["member_id"]) for row in existing_rsvps}
+            if member_id not in invited_member_ids:
+                raise ValueError("This member was not invited for the outing.")
+
+            if self.outing_service.is_member_assigned_for_outing(outing_id, member_id):
+                raise ValueError(
+                    "You are already assigned to a tee time for this outing."
+                )
+
+            yes_member_ids = set(
+                self.rsvp_service.get_schedulable_member_ids(outing_id)
+            )
+            if member_id in yes_member_ids:
+                raise ValueError("You already responded YES for this outing.")
+
+            self.outing_service.add_member_to_tee_time(
+                outing_id=outing_id,
+                tee_time_id=tee_time_id,
+                member_id=member_id,
+            )
+
+            self.rsvp_service.record_yes_if_first(outing_id, member_id)
+
+            member_name = f"{member['first_name']} {member['last_name']}".strip()
+            course_name = str(outing["course_name"] or "")
+            outing_date = str(outing["outing_date"] or "")
+            tee_time_text = str(tee_time["tee_time"] or "")
+
+            html = f"""
+            <html>
+              <body style="font-family: Arial, sans-serif; padding: 24px;">
+                <h1>Open Slot Claimed</h1>
+                <p>Thanks, {member_name}. You have been added to the outing.</p>
+                <p><strong>Course:</strong> {course_name}</p>
+                <p><strong>Date:</strong> {outing_date}</p>
+                <p><strong>Tee Time:</strong> {tee_time_text}</p>
+              </body>
+            </html>
+            """
+            self._send_html(200, html)
+
+        except Exception as exc:
+            # remove later
+            print(repr(exc))
+            message = str(exc).strip() or exc.__class__.__name__
+
+            lines = [line.strip() for line in message.splitlines() if line.strip()]
+            if len(lines) >= 2 and all(line == lines[0] for line in lines):
+                message = lines[0]
+
+            html = f"""
+            <html>
+              <body style="font-family: Arial, sans-serif; padding: 24px;">
+                <h1>Open Slot Unavailable</h1>
+                <p>{message}</p>
               </body>
             </html>
             """
@@ -101,6 +210,7 @@ class RSVPHTTPServer:
         handler.token_service = RSVPTokenService()
         handler.outing_service = OutingService(self.db)
         handler.member_repo = MemberRepository(self.db)
+        handler.open_slot_token_service = OpenSlotTokenService()
 
         self.server = HTTPServer(
             (RSVP_SERVER_HOST, RSVP_SERVER_PORT),
