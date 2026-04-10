@@ -1,3 +1,4 @@
+from PyQt5.QtGui import QBrush
 from ui.shared.forms import GuestFormDialog
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
@@ -270,12 +271,20 @@ class OutingRSVPDialog(QDialog):
         status = row["rsvp_status"]
         schedule_state = row["scheduled"]
 
+        # Determine base palette color (works for dark/light mode)
+        default_text_color = self.member_rsvp_table.palette().color(
+            self.member_rsvp_table.foregroundRole()
+        )
+
         if schedule_state == "Scheduled":
-            foreground = Qt.GlobalColor.darkGreen
+            foreground = QBrush(Qt.GlobalColor.darkGreen)
+
         elif status == "yes":
-            foreground = Qt.GlobalColor.darkYellow
+            foreground = QBrush(Qt.GlobalColor.darkYellow)
+
         else:
-            foreground = Qt.GlobalColor.black
+            # Use system default text color instead of hardcoded black
+            foreground = QBrush(default_text_color)
 
         for col_idx in range(self.member_rsvp_table.columnCount()):
             item = self.member_rsvp_table.item(row_idx, col_idx)
