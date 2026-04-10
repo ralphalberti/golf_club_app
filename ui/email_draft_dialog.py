@@ -1,13 +1,14 @@
 from PyQt5.QtWidgets import (
-    QDialog,
-    QVBoxLayout,
-    QHBoxLayout,
-    QLabel,
     QComboBox,
+    QDialog,
+    QHBoxLayout,
+    QInputDialog,
+    QLabel,
     QLineEdit,
-    QTextEdit,
-    QPushButton,
     QMessageBox,
+    QPushButton,
+    QTextEdit,
+    QVBoxLayout,
 )
 
 
@@ -24,13 +25,20 @@ class EmailDraftDialog(QDialog):
         ],
     }
 
-    def __init__(self, outing_row, draft_service, parent=None):
+    def __init__(
+        self,
+        outing_row,
+        draft_service,
+        email_send_service=None,
+        parent=None,
+    ):
         super().__init__(parent)
         self.setWindowTitle("Email Draft Editor")
         self.resize(700, 600)
 
         self.outing = outing_row
         self.draft_service = draft_service
+        self.email_send_service = email_send_service
 
         self.current_body_html: str | None = None
 
@@ -76,6 +84,10 @@ class EmailDraftDialog(QDialog):
         self.save_btn.clicked.connect(self.save_draft)
         button_layout.addWidget(self.save_btn)
 
+        self.test_send_btn = QPushButton("Send Test Email")
+        self.test_send_btn.clicked.connect(self.send_test_email)
+        button_layout.addWidget(self.test_send_btn)
+
         self.send_btn = QPushButton("Send")
         self.send_btn.clicked.connect(self.send_draft)
         button_layout.addWidget(self.send_btn)
@@ -113,8 +125,8 @@ class EmailDraftDialog(QDialog):
             self.body_input.setPlainText(draft["body_text"])
             self.current_body_html = draft["body_html"]
 
-        except Exception as e:
-            QMessageBox.critical(self, "Error", str(e))
+        except Exception as exc:
+            QMessageBox.critical(self, "Error", str(exc))
 
     def regenerate(self):
         try:
@@ -133,8 +145,8 @@ class EmailDraftDialog(QDialog):
             self.body_input.setPlainText(draft["body_text"])
             self.current_body_html = draft["body_html"]
 
-        except Exception as e:
-            QMessageBox.critical(self, "Error", str(e))
+        except Exception as exc:
+            QMessageBox.critical(self, "Error", str(exc))
 
     def save_draft(self):
         try:
@@ -149,11 +161,86 @@ class EmailDraftDialog(QDialog):
 
             QMessageBox.information(self, "Saved", "Draft saved successfully")
 
-        except Exception as e:
-            QMessageBox.critical(self, "Error", str(e))
+        except Exception as exc:
+            QMessageBox.critical(self, "Error", str(exc))
+
+    def _save_draft_silently(self):
+        self.draft_service.save_draft(
+            outing_id=int(self.outing["id"]),
+            audience_type=self.audience_combo.currentText(),
+            template_type=self.template_combo.currentText(),
+            subject_text=self.subject_input.text(),
+            body_text=self.body_input.toPlainText(),
+            body_html=self.current_body_html,
+        )
 
     def _close_dialog(self) -> None:
         self.close()
+
+    def send_test_email(self):
+        raw_emails, ok = QInputDialog.getText(
+            self,
+            "Send Test Email",
+            "Enter one or more email addresses (comma separated):",
+        )
+        if not ok or not raw_emails.strip():
+            return
+
+        to_emails = [part.strip() for part in raw_emails.split(",") if part.strip()]
+        if not to_emails:
+            QMessageBox.warning(
+                self,
+                "No Recipients",
+                "Enter at least one test email address.",
+            )
+            return
+
+        confirm = QMessageBox.question(
+            self,
+            "Send Test Email",
+            f"Send a test email to {len(to_emails)} recipient(s)?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if confirm != QMessageBox.Yes:
+            return
+
+        try:
+            self._save_draft_silently()
+
+            if self.email_send_service is not None:
+                result = self.email_send_service.send_test_email(
+                    outing_id=int(self.outing["id"]),
+                    audience_type=self.audience_combo.currentText(),
+                    template_type=self.template_combo.currentText(),
+                    to_emails=to_emails,
+                )
+
+                sent_count = int(result.get("sent_count", 0))
+            elif hasattr(self.draft_service, "send_test_draft"):
+                sent_count = int(
+                    self.draft_service.send_test_draft(
+                        outing_id=int(self.outing["id"]),
+                        audience_type=self.audience_combo.currentText(),
+                        template_type=self.template_combo.currentText(),
+                        to_emails=to_emails,
+                    )
+                )
+            else:
+                raise RuntimeError(
+                    "Test send is not wired up yet. "
+                    "Provide email_send_service or implement "
+                    "draft_service.send_test_draft(...)."
+                )
+
+            QMessageBox.information(
+                self,
+                "Test Email Sent",
+                f"Sent {sent_count} test email(s) successfully.",
+            )
+
+        except Exception as exc:
+            QMessageBox.critical(self, "Test Send Failed", str(exc))
 
     def send_draft(self):
         confirm = QMessageBox.question(
@@ -165,7 +252,10 @@ class EmailDraftDialog(QDialog):
         )
         if confirm != QMessageBox.Yes:
             return
+
         try:
+            self._save_draft_silently()
+
             sent_count = self.draft_service.send_draft(
                 outing_id=int(self.outing["id"]),
                 audience_type=self.audience_combo.currentText(),
@@ -178,5 +268,5 @@ class EmailDraftDialog(QDialog):
                 f"Sent {sent_count} email(s) successfully.",
             )
 
-        except Exception as e:
-            QMessageBox.critical(self, "Send Failed", str(e))
+        except Exception as exc:
+            QMessageBox.critical(self, "Send Failed", str(exc))
