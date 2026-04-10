@@ -38,7 +38,7 @@ WORKFLOW_STAGES = [
     "completed",
 ]
 
-RSVP_STATUSES = ["invited", "yes", "no", "maybe"]
+RSVP_STATUSES = ["invited", "yes"]
 
 
 class OutingRSVPDialog(QDialog):
@@ -70,18 +70,14 @@ class OutingRSVPDialog(QDialog):
         self.invite_selected_button = QPushButton("Invite Selected")
         self.remove_invite_button = QPushButton("Remove Invite")
 
-        self.mark_member_invited_button = QPushButton("Mark Invited")
-        self.mark_member_yes_button = QPushButton("Mark Yes")
-        self.mark_member_no_button = QPushButton("Mark No")
-        self.mark_member_maybe_button = QPushButton("Mark Maybe")
+        self.mark_member_invited_button = QPushButton("Reset to Pending")
+        self.mark_member_yes_button = QPushButton("Mark Confirmed")
 
         self.add_guest_button = QPushButton("Add Guest to Outing")
         self.edit_guest_button = QPushButton("Edit Guest")
         self.remove_guest_button = QPushButton("Remove Guest")
-        self.mark_guest_invited_button = QPushButton("Guest Invited")
-        self.mark_guest_yes_button = QPushButton("Guest Yes")
-        self.mark_guest_no_button = QPushButton("Guest No")
-        self.mark_guest_maybe_button = QPushButton("Guest Maybe")
+        self.mark_guest_invited_button = QPushButton("Guest Pending")
+        self.mark_guest_yes_button = QPushButton("Guest Confirmed")
 
         self.invite_all_button.clicked.connect(self.invite_all_active_members)
         self.invite_selected_button.clicked.connect(self.invite_selected_members)
@@ -93,12 +89,6 @@ class OutingRSVPDialog(QDialog):
         self.mark_member_yes_button.clicked.connect(
             lambda: self.update_selected_member_rsvps("yes")
         )
-        self.mark_member_no_button.clicked.connect(
-            lambda: self.update_selected_member_rsvps("no")
-        )
-        self.mark_member_maybe_button.clicked.connect(
-            lambda: self.update_selected_member_rsvps("maybe")
-        )
 
         self.add_guest_button.clicked.connect(self.add_guest_to_outing)
         self.edit_guest_button.clicked.connect(self.edit_selected_guest)
@@ -108,12 +98,6 @@ class OutingRSVPDialog(QDialog):
         )
         self.mark_guest_yes_button.clicked.connect(
             lambda: self.update_selected_guest_statuses("yes")
-        )
-        self.mark_guest_no_button.clicked.connect(
-            lambda: self.update_selected_guest_statuses("no")
-        )
-        self.mark_guest_maybe_button.clicked.connect(
-            lambda: self.update_selected_guest_statuses("maybe")
         )
 
         self.available_members_list = QListWidget()
@@ -134,7 +118,7 @@ class OutingRSVPDialog(QDialog):
         self.guest_table.setSelectionMode(SelectionMode.ExtendedSelection)
         self.guest_table.setEditTriggers(EditTrigger.NoEditTriggers)
 
-        self.eligible_summary_label = QLabel("Eligible to Schedule: --")
+        self.eligible_summary_label = QLabel("RSVP Summary: --")
 
         main_layout = QVBoxLayout(self)
 
@@ -160,14 +144,12 @@ class OutingRSVPDialog(QDialog):
 
         right_panel = QWidget()
         right_layout = QVBoxLayout(right_panel)
-        right_layout.addWidget(QLabel("Invited / RSVP Members"))
+        right_layout.addWidget(QLabel("Invited / Confirmed Members"))
         right_layout.addWidget(self.member_rsvp_table)
 
         rsvp_button_row = QHBoxLayout()
         rsvp_button_row.addWidget(self.mark_member_invited_button)
         rsvp_button_row.addWidget(self.mark_member_yes_button)
-        rsvp_button_row.addWidget(self.mark_member_no_button)
-        rsvp_button_row.addWidget(self.mark_member_maybe_button)
         rsvp_button_row.addWidget(self.remove_invite_button)
         right_layout.addLayout(rsvp_button_row)
 
@@ -183,8 +165,6 @@ class OutingRSVPDialog(QDialog):
         guest_button_row.addWidget(self.edit_guest_button)
         guest_button_row.addWidget(self.mark_guest_invited_button)
         guest_button_row.addWidget(self.mark_guest_yes_button)
-        guest_button_row.addWidget(self.mark_guest_no_button)
-        guest_button_row.addWidget(self.mark_guest_maybe_button)
         guest_button_row.addWidget(self.remove_guest_button)
         guest_button_row.addStretch()
         guest_layout.addLayout(guest_button_row)
@@ -249,9 +229,9 @@ class OutingRSVPDialog(QDialog):
             [
                 "Member",
                 "Email",
-                "RSVP",
+                "Status",
                 "Responded",
-                "Scheduled",
+                "Schedule State",
                 "Tee Time",
                 "Waitlist",
                 "Note",
@@ -272,12 +252,6 @@ class OutingRSVPDialog(QDialog):
             waitlist_item = QTableWidgetItem(row["waitlist_position"])
             note_item = QTableWidgetItem(row["note"])
 
-            # Optional: visual clarity
-            if row["scheduled"] == "Yes":
-                scheduled_item.setForeground(Qt.GlobalColor.darkGreen)
-            elif row["rsvp_status"] == "yes":
-                scheduled_item.setForeground(Qt.GlobalColor.darkYellow)
-
             self.member_rsvp_table.setItem(row_idx, 0, member_item)
             self.member_rsvp_table.setItem(row_idx, 1, email_item)
             self.member_rsvp_table.setItem(row_idx, 2, status_item)
@@ -287,8 +261,26 @@ class OutingRSVPDialog(QDialog):
             self.member_rsvp_table.setItem(row_idx, 6, waitlist_item)
             self.member_rsvp_table.setItem(row_idx, 7, note_item)
 
+            self._apply_member_row_styling(row_idx, row)
+
         self.member_rsvp_table.resizeColumnsToContents()
         self.member_rsvp_table.horizontalHeader().setStretchLastSection(True)
+
+    def _apply_member_row_styling(self, row_idx: int, row: dict):
+        status = row["rsvp_status"]
+        schedule_state = row["scheduled"]
+
+        if schedule_state == "Scheduled":
+            foreground = Qt.GlobalColor.darkGreen
+        elif status == "yes":
+            foreground = Qt.GlobalColor.darkYellow
+        else:
+            foreground = Qt.GlobalColor.black
+
+        for col_idx in range(self.member_rsvp_table.columnCount()):
+            item = self.member_rsvp_table.item(row_idx, col_idx)
+            if item is not None:
+                item.setForeground(foreground)
 
     def load_guests(self):
         rows = self.guest_service.list_outing_guests(self.outing_id)
@@ -325,28 +317,29 @@ class OutingRSVPDialog(QDialog):
         tee_times = self.outing_service.get_tee_times(self.outing_id)
 
         invited_count = len(dashboard_rows)
-        yes_count = sum(1 for row in dashboard_rows if row["rsvp_status"] == "yes")
-        scheduled_count = sum(1 for row in dashboard_rows if row["scheduled"] == "Yes")
-
+        confirmed_count = sum(
+            1 for row in dashboard_rows if row["rsvp_status"] == "yes"
+        )
+        pending_count = invited_count - confirmed_count
+        scheduled_count = sum(
+            1 for row in dashboard_rows if row["scheduled"] == "Scheduled"
+        )
         waitlist_count = sum(
-            1
-            for row in dashboard_rows
-            if row["rsvp_status"] == "yes" and row["scheduled"] == "No"
+            1 for row in dashboard_rows if row["scheduled"] == "Waitlist"
         )
 
         guest_rows = self.guest_service.list_schedulable_outing_guests(self.outing_id)
-        guest_yes_count = len(guest_rows)
+        guest_confirmed_count = len(guest_rows)
 
         capacity = sum(int(row["max_players"]) for row in tee_times)
         open_spots = max(0, capacity - scheduled_count)
 
         self.eligible_summary_label.setText(
-            "Invited: "
-            f"{invited_count}  |  "
-            f"Yes: {yes_count}  |  "
+            f"Pending: {pending_count}  |  "
+            f"Confirmed: {confirmed_count}  |  "
             f"Scheduled: {scheduled_count}  |  "
             f"Waitlist: {waitlist_count}  |  "
-            f"Guests Yes: {guest_yes_count}  |  "
+            f"Guests Confirmed: {guest_confirmed_count}  |  "
             f"Open Spots: {open_spots}"
         )
 
@@ -540,18 +533,23 @@ class OutingRSVPDialog(QDialog):
         if not ok or not guest_choice:
             return
 
-        dlg = GuestFormDialog(parent=self)
-        if not dlg.exec_():
-            return
+        if guest_choice == "<Create New Guest>":
+            dlg = GuestFormDialog(parent=self)
+            if not dlg.exec_():
+                return
 
-        values = dlg.values()
-
-        guest_id = self.guest_service.create_guest(values)
-        self.guest_service.add_guest_to_outing(
-            outing_id=self.outing_id,
-            guest_id=guest_id,
-            sponsoring_member_id=sponsor_member_id,
-        )
+            values = dlg.values()
+            guest_id = self.guest_service.create_guest(values)
+        else:
+            try:
+                guest_id = int(guest_choice.rsplit("(id:", 1)[1].rstrip(")"))
+            except (IndexError, ValueError):
+                QMessageBox.warning(
+                    self,
+                    "Invalid Guest Selection",
+                    "Could not determine the selected guest.",
+                )
+                return
 
         status, ok = QInputDialog.getItem(
             self,
@@ -671,7 +669,8 @@ class OutingRSVPDialog(QDialog):
             return
 
         self.guest_service.update_guest(guest_id, dlg.values())
-        self.load_guests()
+        self.load_data()
+        self._warn_if_schedule_invalid_after_guest_change()
 
     def _warn_if_schedule_invalid_after_guest_change(self):
         try:
@@ -722,7 +721,12 @@ class OutingRSVPDialog(QDialog):
             is_yes = str(row["status"] or "") == "yes"
 
             waitlist_position = ""
-            if is_yes and not is_scheduled:
+            schedule_state = ""
+
+            if is_scheduled:
+                schedule_state = "Scheduled"
+            elif is_yes:
+                schedule_state = "Waitlist"
                 waitlist_position = str(
                     waitlist_position_by_member_id.get(member_id, "")
                 )
@@ -734,11 +738,21 @@ class OutingRSVPDialog(QDialog):
                     "email": str(row["email"] or ""),
                     "rsvp_status": str(row["status"] or ""),
                     "responded_at": str(row["responded_at"] or ""),
-                    "scheduled": "Yes" if is_scheduled else "No",
+                    "scheduled": schedule_state,
                     "tee_time": assigned_tee_time,
                     "waitlist_position": waitlist_position,
                     "note": str(row["note"] or ""),
                 }
             )
 
-        return dashboard_rows
+        def sort_key(row):
+            status = row["rsvp_status"]
+            schedule_state = row["scheduled"]
+
+            if schedule_state == "Scheduled":
+                return (0, row["tee_time"])
+            if status == "yes":
+                return (1, int(row["waitlist_position"] or 9999))
+            return (2, row["member_name"].lower())
+
+        return sorted(dashboard_rows, key=sort_key)
