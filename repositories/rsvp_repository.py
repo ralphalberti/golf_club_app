@@ -205,3 +205,29 @@ class RSVPRepository(BaseRepository):
                 """,
                 (responded_at, note, now, outing_id, member_id),
             )
+
+    def list_member_rsvps_for_outing(self, outing_id: int):
+        with self.db.get_conn() as conn:
+            return conn.execute(
+                """
+                SELECT
+                    r.outing_id,
+                    r.member_id,
+                    r.status,
+                    r.responded_at,
+                    r.note,
+                    m.first_name,
+                    m.last_name,
+                    m.email,
+                    m.active
+                FROM outing_rsvps r
+                JOIN members m ON m.id = r.member_id
+                WHERE r.outing_id = ?
+                ORDER BY
+                    CASE WHEN r.responded_at IS NULL THEN 1 ELSE 0 END,
+                    r.responded_at,
+                    m.last_name,
+                    m.first_name
+                """,
+                (outing_id,),
+            ).fetchall()

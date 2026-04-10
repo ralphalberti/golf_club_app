@@ -240,31 +240,52 @@ class OutingRSVPDialog(QDialog):
             self.available_members_list.addItem(item)
 
     def load_member_rsvps(self):
-        rows = self.rsvp_service.list_member_rsvps_for_outing(self.outing_id)
+        rows = self._build_dashboard_rows()
 
         self.member_rsvp_table.clear()
         self.member_rsvp_table.setRowCount(0)
-        self.member_rsvp_table.setColumnCount(5)
+        self.member_rsvp_table.setColumnCount(8)
         self.member_rsvp_table.setHorizontalHeaderLabels(
-            ["Member", "Status", "Responded", "Email", "Note"]
+            [
+                "Member",
+                "Email",
+                "RSVP",
+                "Responded",
+                "Scheduled",
+                "Tee Time",
+                "Waitlist",
+                "Note",
+            ]
         )
 
         for row_idx, row in enumerate(rows):
             self.member_rsvp_table.insertRow(row_idx)
 
-            member_item = QTableWidgetItem(f"{row['first_name']} {row['last_name']}")
+            member_item = QTableWidgetItem(row["member_name"])
             member_item.setData(DataRole.UserRole, int(row["member_id"]))
 
-            status_item = QTableWidgetItem(str(row["status"] or ""))
-            responded_item = QTableWidgetItem(str(row["responded_at"] or ""))
-            email_item = QTableWidgetItem(str(row["email"] or ""))
-            note_item = QTableWidgetItem(str(row["note"] or ""))
+            email_item = QTableWidgetItem(row["email"])
+            status_item = QTableWidgetItem(row["rsvp_status"])
+            responded_item = QTableWidgetItem(row["responded_at"])
+            scheduled_item = QTableWidgetItem(row["scheduled"])
+            tee_time_item = QTableWidgetItem(row["tee_time"])
+            waitlist_item = QTableWidgetItem(row["waitlist_position"])
+            note_item = QTableWidgetItem(row["note"])
+
+            # Optional: visual clarity
+            if row["scheduled"] == "Yes":
+                scheduled_item.setForeground(Qt.GlobalColor.darkGreen)
+            elif row["rsvp_status"] == "yes":
+                scheduled_item.setForeground(Qt.GlobalColor.darkYellow)
 
             self.member_rsvp_table.setItem(row_idx, 0, member_item)
-            self.member_rsvp_table.setItem(row_idx, 1, status_item)
-            self.member_rsvp_table.setItem(row_idx, 2, responded_item)
-            self.member_rsvp_table.setItem(row_idx, 3, email_item)
-            self.member_rsvp_table.setItem(row_idx, 4, note_item)
+            self.member_rsvp_table.setItem(row_idx, 1, email_item)
+            self.member_rsvp_table.setItem(row_idx, 2, status_item)
+            self.member_rsvp_table.setItem(row_idx, 3, responded_item)
+            self.member_rsvp_table.setItem(row_idx, 4, scheduled_item)
+            self.member_rsvp_table.setItem(row_idx, 5, tee_time_item)
+            self.member_rsvp_table.setItem(row_idx, 6, waitlist_item)
+            self.member_rsvp_table.setItem(row_idx, 7, note_item)
 
         self.member_rsvp_table.resizeColumnsToContents()
         self.member_rsvp_table.horizontalHeader().setStretchLastSection(True)
@@ -300,12 +321,33 @@ class OutingRSVPDialog(QDialog):
         self.guest_table.horizontalHeader().setStretchLastSection(True)
 
     def refresh_eligible_summary(self):
-        member_ids = self.rsvp_service.get_schedulable_member_ids(self.outing_id)
+        dashboard_rows = self._build_dashboard_rows()
+        tee_times = self.outing_service.get_tee_times(self.outing_id)
+
+        invited_count = len(dashboard_rows)
+        yes_count = sum(1 for row in dashboard_rows if row["rsvp_status"] == "yes")
+        scheduled_count = sum(1 for row in dashboard_rows if row["scheduled"] == "Yes")
+
+        waitlist_count = sum(
+            1
+            for row in dashboard_rows
+            if row["rsvp_status"] == "yes" and row["scheduled"] == "No"
+        )
+
         guest_rows = self.guest_service.list_schedulable_outing_guests(self.outing_id)
-        total = len(member_ids) + len(guest_rows)
+        guest_yes_count = len(guest_rows)
+
+        capacity = sum(int(row["max_players"]) for row in tee_times)
+        open_spots = max(0, capacity - scheduled_count)
 
         self.eligible_summary_label.setText(
-            f"Eligible to Schedule: Members {len(member_ids)}  |  Guests {len(guest_rows)}  |  Total {total}"
+            "Invited: "
+            f"{invited_count}  |  "
+            f"Yes: {yes_count}  |  "
+            f"Scheduled: {scheduled_count}  |  "
+            f"Waitlist: {waitlist_count}  |  "
+            f"Guests Yes: {guest_yes_count}  |  "
+            f"Open Spots: {open_spots}"
         )
 
     def invite_all_active_members(self):
@@ -538,24 +580,6 @@ class OutingRSVPDialog(QDialog):
                 f"Could not add guest to outing.\n\n{exc}",
             )
 
-    def edit_selected_guest(self):
-        item = self.guest_list.currentItem()
-        if not item:
-            return
-
-        guest_id = item.data(DataRole.UserRole)
-
-        guest = self.guest_service.get_guest_by_id(guest_id)
-
-        dlg = GuestFormDialog(guest)
-        if not dlg.exec_():
-            return
-
-        values = dlg.values()
-        self.guest_service.update_guest(guest_id, values)
-
-        self.load_guests()
-
     def update_selected_guest_statuses(self, status: str):
         guest_ids = self._selected_guest_ids()
         if not guest_ids:
@@ -649,28 +673,6 @@ class OutingRSVPDialog(QDialog):
         self.guest_service.update_guest(guest_id, dlg.values())
         self.load_guests()
 
-    def remove_selected_guest(self):
-        item = self.guest_list.currentItem()
-        if not item:
-            return
-
-        guest_id = item.data(DataRole.UserRole)
-
-        confirm = QMessageBox.question(
-            self,
-            "Remove Guest",
-            "Remove this guest from the outing?",
-        )
-        if confirm != QMessageBox.Yes:
-            return
-
-        self.guest_service.remove_guest_from_outing(
-            outing_id=self.outing_id,
-            guest_id=guest_id,
-        )
-
-        self.load_guests()
-
     def _warn_if_schedule_invalid_after_guest_change(self):
         try:
             self.outing_service.validate_existing_schedule(self.outing_id)
@@ -690,3 +692,53 @@ class OutingRSVPDialog(QDialog):
                 "Please regenerate or revise the schedule.\n\n"
                 f"Details: {exc}",
             )
+
+    def _build_dashboard_rows(self):
+        rsvp_rows = self.rsvp_service.list_member_rsvps_for_outing(self.outing_id)
+        assignment_rows = self.outing_service.get_assignments(self.outing_id)
+
+        assigned_by_member_id: dict[int, str] = {}
+        for row in assignment_rows:
+            assigned_by_member_id[int(row["member_id"])] = str(row["tee_time"] or "")
+
+        yes_unassigned_member_ids = [
+            int(row["member_id"])
+            for row in rsvp_rows
+            if str(row["status"] or "") == "yes"
+            and int(row["member_id"]) not in assigned_by_member_id
+        ]
+
+        waitlist_position_by_member_id = {
+            member_id: index + 1
+            for index, member_id in enumerate(yes_unassigned_member_ids)
+        }
+
+        dashboard_rows = []
+
+        for row in rsvp_rows:
+            member_id = int(row["member_id"])
+            assigned_tee_time = assigned_by_member_id.get(member_id, "")
+            is_scheduled = member_id in assigned_by_member_id
+            is_yes = str(row["status"] or "") == "yes"
+
+            waitlist_position = ""
+            if is_yes and not is_scheduled:
+                waitlist_position = str(
+                    waitlist_position_by_member_id.get(member_id, "")
+                )
+
+            dashboard_rows.append(
+                {
+                    "member_id": member_id,
+                    "member_name": f"{row['first_name']} {row['last_name']}".strip(),
+                    "email": str(row["email"] or ""),
+                    "rsvp_status": str(row["status"] or ""),
+                    "responded_at": str(row["responded_at"] or ""),
+                    "scheduled": "Yes" if is_scheduled else "No",
+                    "tee_time": assigned_tee_time,
+                    "waitlist_position": waitlist_position,
+                    "note": str(row["note"] or ""),
+                }
+            )
+
+        return dashboard_rows

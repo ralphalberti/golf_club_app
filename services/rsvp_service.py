@@ -62,3 +62,6 @@ class RSVPService:
         note: str = "",
     ) -> None:
         self.repo.record_yes_if_first(outing_id, member_id, note)
+
+    def list_member_rsvps_for_outing(self, outing_id: int):
+        return self.repo.list_member_rsvps_for_outing(outing_id)
