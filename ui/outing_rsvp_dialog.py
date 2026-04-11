@@ -1,6 +1,6 @@
 from PyQt5.QtGui import QBrush
 from ui.shared.forms import GuestFormDialog
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QSettings
 from PyQt5.QtWidgets import (
     QAbstractItemView,
     QComboBox,
@@ -41,6 +41,12 @@ WORKFLOW_STAGES = [
 
 RSVP_STATUSES = ["invited", "yes"]
 
+MEMBER_EMAIL_TEMPLATES = [
+    ("Invitation", "invitation"),
+    ("Pairings", "pairings"),
+    ("Revised Pairings", "revised_pairings"),
+]
+
 
 class OutingRSVPDialog(QDialog):
     def __init__(
@@ -49,6 +55,7 @@ class OutingRSVPDialog(QDialog):
         outing_service,
         rsvp_service,
         guest_service,
+        email_send_service,
         parent=None,
     ):
         super().__init__(parent)
@@ -56,6 +63,8 @@ class OutingRSVPDialog(QDialog):
         self.outing_service = outing_service
         self.rsvp_service = rsvp_service
         self.guest_service = guest_service
+        self.email_send_service = email_send_service
+        self.settings = QSettings("GolfClubApp", "OutingManager")
 
         self.setWindowTitle("Manage RSVP")
         self.resize(1200, 760)
@@ -70,6 +79,7 @@ class OutingRSVPDialog(QDialog):
         self.invite_all_button = QPushButton("Invite All Active Members")
         self.invite_selected_button = QPushButton("Invite Selected")
         self.remove_invite_button = QPushButton("Remove Invite")
+        self.send_selected_email_button = QPushButton("Send Email to Selected")
 
         self.mark_member_invited_button = QPushButton("Reset to Pending")
         self.mark_member_yes_button = QPushButton("Mark Confirmed")
@@ -80,9 +90,20 @@ class OutingRSVPDialog(QDialog):
         self.mark_guest_invited_button = QPushButton("Guest Pending")
         self.mark_guest_yes_button = QPushButton("Guest Confirmed")
 
+        self.member_email_template_combo = QComboBox()
+        for label, value in MEMBER_EMAIL_TEMPLATES:
+            self.member_email_template_combo.addItem(label, value)
+        self._restore_member_email_template()
+        self.member_email_template_combo.currentIndexChanged.connect(
+            self._save_member_email_template
+        )
+
         self.invite_all_button.clicked.connect(self.invite_all_active_members)
         self.invite_selected_button.clicked.connect(self.invite_selected_members)
         self.remove_invite_button.clicked.connect(self.remove_selected_member_rsvps)
+        self.send_selected_email_button.clicked.connect(
+            self.send_email_to_selected_members
+        )
 
         self.mark_member_invited_button.clicked.connect(
             lambda: self.update_selected_member_rsvps("invited")
@@ -148,9 +169,16 @@ class OutingRSVPDialog(QDialog):
         right_layout.addWidget(QLabel("Invited / Confirmed Members"))
         right_layout.addWidget(self.member_rsvp_table)
 
+        email_template_row = QHBoxLayout()
+        email_template_row.addWidget(QLabel("Member Email Template"))
+        email_template_row.addWidget(self.member_email_template_combo)
+        email_template_row.addStretch()
+        right_layout.addLayout(email_template_row)
+
         rsvp_button_row = QHBoxLayout()
         rsvp_button_row.addWidget(self.mark_member_invited_button)
         rsvp_button_row.addWidget(self.mark_member_yes_button)
+        rsvp_button_row.addWidget(self.send_selected_email_button)
         rsvp_button_row.addWidget(self.remove_invite_button)
         right_layout.addLayout(rsvp_button_row)
 
@@ -271,19 +299,15 @@ class OutingRSVPDialog(QDialog):
         status = row["rsvp_status"]
         schedule_state = row["scheduled"]
 
-        # Determine base palette color (works for dark/light mode)
         default_text_color = self.member_rsvp_table.palette().color(
             self.member_rsvp_table.foregroundRole()
         )
 
         if schedule_state == "Scheduled":
             foreground = QBrush(Qt.GlobalColor.darkGreen)
-
         elif status == "yes":
             foreground = QBrush(Qt.GlobalColor.darkYellow)
-
         else:
-            # Use system default text color instead of hardcoded black
             foreground = QBrush(default_text_color)
 
         for col_idx in range(self.member_rsvp_table.columnCount()):
@@ -416,6 +440,32 @@ class OutingRSVPDialog(QDialog):
                 ids.append(member_id)
 
         return ids
+
+    def _selected_member_email_template(self) -> str:
+        return str(self.member_email_template_combo.currentData() or "invitation")
+
+    def _member_email_template_settings_key(self) -> str:
+        return "outing_rsvp/member_email_template"
+
+    def _restore_member_email_template(self):
+        saved_value = self.settings.value(
+            self._member_email_template_settings_key(),
+            "invitation",
+            type=str,
+        )
+
+        for index in range(self.member_email_template_combo.count()):
+            if self.member_email_template_combo.itemData(index) == saved_value:
+                self.member_email_template_combo.setCurrentIndex(index)
+                return
+
+        self.member_email_template_combo.setCurrentIndex(0)
+
+    def _save_member_email_template(self):
+        self.settings.setValue(
+            self._member_email_template_settings_key(),
+            self._selected_member_email_template(),
+        )
 
     def update_selected_member_rsvps(self, status: str):
         member_ids = self._selected_member_rsvp_ids()
@@ -765,3 +815,69 @@ class OutingRSVPDialog(QDialog):
             return (2, row["member_name"].lower())
 
         return sorted(dashboard_rows, key=sort_key)
+
+    def send_email_to_selected_members(self):
+        member_ids = self._selected_member_rsvp_ids()
+        if not member_ids:
+            QMessageBox.warning(
+                self,
+                "No Selection",
+                "Select one or more member RSVP rows first.",
+            )
+            return
+
+        template_type = self._selected_member_email_template()
+
+        confirm = QMessageBox.question(
+            self,
+            "Send Email to Selected Members",
+            f"Send the saved '{template_type}' draft to {len(member_ids)} selected member(s)?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if confirm != QMessageBox.Yes:
+            return
+
+        try:
+            result = self.email_send_service.send_draft_to_member_ids(
+                outing_id=self.outing_id,
+                template_type=template_type,
+                member_ids=member_ids,
+            )
+
+            sent_count = int(result.get("sent_count", 0))
+            skipped_count = len(result.get("skipped", []))
+            failed_count = len(result.get("failed", []))
+
+            message = (
+                f"SMTP accepted {sent_count} email(s).\n\n"
+                f"Skipped: {skipped_count}\n"
+                f"Failed: {failed_count}"
+            )
+
+            if skipped_count:
+                skipped_lines = [
+                    f"- Member {row['member_id']}: {row['reason']}"
+                    for row in result["skipped"][:10]
+                ]
+                message += "\n\nSkipped details:\n" + "\n".join(skipped_lines)
+
+            if failed_count:
+                failed_lines = [
+                    f"- Member {row['member_id']} ({row.get('email', '')}): {row['error']}"
+                    for row in result["failed"][:10]
+                ]
+                message += "\n\nFailed details:\n" + "\n".join(failed_lines)
+
+            QMessageBox.information(
+                self,
+                "Selected Email Send Complete",
+                message,
+            )
+
+        except Exception as exc:
+            QMessageBox.warning(
+                self,
+                "Send Failed",
+                f"Could not send email to selected members.\n\n{exc}",
+            )

@@ -22,7 +22,6 @@ from ui.settings_dialog import SettingsDialog
 from ui.shared.forms import MemberFormDialog, CourseFormDialog, OutingFormDialog
 from ui.outing_rsvp_dialog import OutingRSVPDialog
 from ui.email_draft_dialog import EmailDraftDialog
-from services.outing_email_send_service import OutingEmailSendService
 
 Align = Qt.AlignmentFlag
 DataRole = Qt.ItemDataRole
@@ -1018,6 +1017,7 @@ class MainWindow(QMainWindow):
             outing_service=self.outing_service,
             rsvp_service=self.rsvp_service,
             guest_service=self.guest_service,
+            email_send_service=self.outing_email_send_service,
             parent=self,
         )
         dlg.exec_()
