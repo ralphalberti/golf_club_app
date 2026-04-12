@@ -1,3 +1,6 @@
+from services.outing_workflow_service import OutingWorkflowService
+
+
 class OutingEmailSendService:
     VALID_MEMBER_TEMPLATE_TYPES = {
         "invitation",
@@ -11,6 +14,7 @@ class OutingEmailSendService:
         self.member_repo = draft_service.member_repo
         self.course_repo = draft_service.course_repo
         self.outing_service = draft_service.outing_service
+        self.workflow_service = OutingWorkflowService(draft_service.repo.db)
 
     def send_test_email(
         self,
@@ -222,6 +226,20 @@ class OutingEmailSendService:
                         "email": to_email,
                         "error": str(exc),
                     }
+                )
+
+        if sent > 0:
+            self.draft_service.mark_sent(
+                outing_id,
+                "member",
+                template_type,
+            )
+
+            if hasattr(self, "workflow_service"):
+                self.workflow_service.advance_after_member_email_send(
+                    outing_id=outing_id,
+                    template_type=template_type,
+                    sent_count=sent,
                 )
 
         return {

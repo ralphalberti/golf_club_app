@@ -19,6 +19,7 @@ from PyQt5.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from services.outing_workflow_service import OutingWorkflowService
 
 DataRole = Qt.ItemDataRole
 SelectionBehavior = QTableWidget.SelectionBehavior
@@ -65,6 +66,9 @@ class OutingRSVPDialog(QDialog):
         self.guest_service = guest_service
         self.email_send_service = email_send_service
         self.settings = QSettings("GolfClubApp", "OutingManager")
+        self.workflow_service = OutingWorkflowService(
+            self.email_send_service.draft_service.repo.db
+        )
 
         self.setWindowTitle("Manage RSVP")
         self.resize(1200, 760)
@@ -79,7 +83,7 @@ class OutingRSVPDialog(QDialog):
         self.invite_all_button = QPushButton("Invite All Active Members")
         self.invite_selected_button = QPushButton("Invite Selected")
         self.remove_invite_button = QPushButton("Remove Invite")
-        self.send_selected_email_button = QPushButton("Send Email to Selected")
+        self.send_selected_email_button = QPushButton("Send Selected Members Email")
 
         self.mark_member_invited_button = QPushButton("Reset to Pending")
         self.mark_member_yes_button = QPushButton("Mark Confirmed")
@@ -141,6 +145,7 @@ class OutingRSVPDialog(QDialog):
         self.guest_table.setEditTriggers(EditTrigger.NoEditTriggers)
 
         self.eligible_summary_label = QLabel("RSVP Summary: --")
+        self.recommended_next_step_label = QLabel("Recommended Next Step: --")
 
         main_layout = QVBoxLayout(self)
 
@@ -199,6 +204,8 @@ class OutingRSVPDialog(QDialog):
         guest_layout.addLayout(guest_button_row)
 
         footer_row = QHBoxLayout()
+        footer_row.addWidget(self.recommended_next_step_label)
+        footer_row.addSpacing(20)
         footer_row.addWidget(self.eligible_summary_label)
         footer_row.addStretch()
 
@@ -210,6 +217,7 @@ class OutingRSVPDialog(QDialog):
         self.load_data()
 
     def load_data(self):
+        self._refresh_workflow_guidance()
         self.load_workflow_stage()
         self.load_available_members()
         self.load_member_rsvps()
@@ -466,6 +474,36 @@ class OutingRSVPDialog(QDialog):
             self._member_email_template_settings_key(),
             self._selected_member_email_template(),
         )
+
+    def _refresh_workflow_guidance(self):
+        try:
+            snapshot = self.workflow_service.get_workflow_snapshot(self.outing_id)
+        except Exception:
+            self.recommended_next_step_label.setText("Recommended Next Step: --")
+            return
+
+        recommended_template = str(
+            snapshot.get("recommended_member_template", "invitation")
+        )
+        self._set_member_email_template_if_available(recommended_template)
+
+        next_step = str(snapshot.get("recommended_next_step", "")).strip() or "--"
+        self.recommended_next_step_label.setText(f"Recommended Next Step: {next_step}")
+
+    def _set_member_email_template_if_available(self, template_type: str):
+        current_value = self._selected_member_email_template()
+
+        should_override = (
+            current_value == "invitation" or template_type == "revised_pairings"
+        )
+
+        if not should_override:
+            return
+
+        for index in range(self.member_email_template_combo.count()):
+            if self.member_email_template_combo.itemData(index) == template_type:
+                self.member_email_template_combo.setCurrentIndex(index)
+                return
 
     def update_selected_member_rsvps(self, status: str):
         member_ids = self._selected_member_rsvp_ids()

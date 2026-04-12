@@ -84,13 +84,9 @@ class EmailDraftDialog(QDialog):
         self.save_btn.clicked.connect(self.save_draft)
         button_layout.addWidget(self.save_btn)
 
-        self.test_send_btn = QPushButton("Send Test Email")
+        self.test_send_btn = QPushButton("Send Test")
         self.test_send_btn.clicked.connect(self.send_test_email)
         button_layout.addWidget(self.test_send_btn)
-
-        self.send_btn = QPushButton("Send")
-        self.send_btn.clicked.connect(self.send_draft)
-        button_layout.addWidget(self.send_btn)
 
         self.close_btn = QPushButton("Close")
         self.close_btn.clicked.connect(self._close_dialog)
@@ -241,32 +237,3 @@ class EmailDraftDialog(QDialog):
 
         except Exception as exc:
             QMessageBox.critical(self, "Test Send Failed", str(exc))
-
-    def send_draft(self):
-        confirm = QMessageBox.question(
-            self,
-            "Send Email",
-            "Send this draft now?",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No,
-        )
-        if confirm != QMessageBox.Yes:
-            return
-
-        try:
-            self._save_draft_silently()
-
-            sent_count = self.draft_service.send_draft(
-                outing_id=int(self.outing["id"]),
-                audience_type=self.audience_combo.currentText(),
-                template_type=self.template_combo.currentText(),
-            )
-
-            QMessageBox.information(
-                self,
-                "Email Sent",
-                f"Sent {sent_count} email(s) successfully.",
-            )
-
-        except Exception as exc:
-            QMessageBox.critical(self, "Send Failed", str(exc))

@@ -13,6 +13,7 @@ from PyQt5.QtWidgets import (
     QTreeWidgetItem,
     QVBoxLayout,
 )
+from services.outing_workflow_service import OutingWorkflowService
 
 DataRole = Qt.ItemDataRole
 DropAction = Qt.DropAction
@@ -98,6 +99,7 @@ class ScheduleEditorDialog(QDialog):
         self.outing_service = outing_service
         self.settings_service = settings_service
         self.settings = self.settings_service.get_all()
+        self.workflow_service = OutingWorkflowService(self.outing_service.repo.db)
 
         self.guest_rows_by_sponsor_id: dict[int, list] = {}
 
@@ -420,8 +422,18 @@ class ScheduleEditorDialog(QDialog):
 
         try:
             self.outing_service.replace_assignments(self.outing_id, grouped_member_ids)
+            new_stage = self._sync_workflow_after_schedule_change()
             self.load_available_members()
             self.load_assignments_tree()
+
+            if new_stage == "schedule_revised":
+                QMessageBox.information(
+                    self,
+                    "Workflow Updated",
+                    "The schedule changed after pairings were sent.\n\n"
+                    "Workflow stage has been updated to 'schedule_revised'.",
+                )
+
         except Exception as exc:
             QMessageBox.critical(
                 self,
@@ -429,6 +441,17 @@ class ScheduleEditorDialog(QDialog):
                 f"Could not save the updated schedule.\n\n{exc}",
             )
             self.load_assignments_tree()
+
+    def _sync_workflow_after_schedule_change(self):
+        try:
+            new_stage = (
+                self.workflow_service.mark_schedule_changed_after_pairings_if_needed(
+                    self.outing_id
+                )
+            )
+            return str(new_stage or "")
+        except Exception:
+            return ""
 
     def add_selected_member(self):
         member_items = self.available_members_list.selectedItems()
