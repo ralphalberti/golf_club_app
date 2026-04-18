@@ -65,7 +65,7 @@ class OutingWorkflowService:
         if not outing:
             raise ValueError(f"Outing not found: {outing_id}")
 
-        current_stage = self.rsvp_service.get_outing_workflow_stage(outing_id)
+        current_stage = self.sync_stage_with_current_state(outing_id)
         assignments = self.outing_service.get_assignments(outing_id)
         tee_times = self.outing_service.get_tee_times(outing_id)
         rsvp_rows = self.rsvp_service.list_member_rsvps_for_outing(outing_id)
@@ -157,50 +157,48 @@ class OutingWorkflowService:
         return "course_hold_request"
 
     def get_recommended_next_step(self, outing_id: int) -> str:
-        """
-        Human-readable next-step hint for the UI.
-        """
         outing = self.outing_service.get_outing(outing_id)
         if not outing:
             return "Outing not found"
 
         assignments = self.outing_service.get_assignments(outing_id)
+        rsvp_rows = self.rsvp_service.list_member_rsvps_for_outing(outing_id)
+
         invitation_draft = self._get_member_draft(outing_id, "invitation")
         pairings_draft = self._get_member_draft(outing_id, "pairings")
         revised_pairings_draft = self._get_member_draft(outing_id, "revised_pairings")
-        course_hold_draft = self._get_course_draft(outing_id, "course_hold_request")
-        course_final_draft = self._get_course_draft(outing_id, "course_final_schedule")
 
+        has_invited = bool(rsvp_rows)
+        has_yes = any(str(r["status"] or "") == "yes" for r in rsvp_rows)
+
+        # --- Start of workflow ---
         if not self._exists(invitation_draft):
             return "Prepare invitation draft"
 
         if not self._is_sent(invitation_draft):
             return "Send invitation email to members"
 
-        if not assignments and not self.should_generate_schedule_now(outing_id):
-            return "Wait for RSVP window before generating schedule"
+        # --- RSVP phase ---
+        if not has_invited:
+            return "Invite members to outing"
 
-        if not assignments and self.should_generate_schedule_now(outing_id):
-            return "Generate schedule from current RSVP yes list"
+        if not has_yes:
+            return "Wait for members to RSVP"
 
-        if assignments and not self._is_sent(pairings_draft):
+        # --- Scheduling ---
+        if not assignments:
+            return "Generate schedule"
+
+        # --- Pairings ---
+        if not self._is_sent(pairings_draft):
             return "Send pairings email to members"
 
+        # --- Revised ---
         if self.is_revised_pairings_needed(outing_id):
             if not self._exists(revised_pairings_draft):
                 return "Prepare revised pairings draft"
             if not self._is_sent(revised_pairings_draft):
                 return "Send revised pairings email to members"
-
-        if self.should_send_course_hold_now(outing_id) and not self._is_sent(
-            course_hold_draft
-        ):
-            return "Send course hold / tee-time count email"
-
-        if self.should_send_course_final_now(outing_id) and not self._is_sent(
-            course_final_draft
-        ):
-            return "Send final schedule to course"
 
         return "Workflow looks current"
 
@@ -391,11 +389,15 @@ class OutingWorkflowService:
     def _determine_best_stage(self, outing_id: int) -> str:
         invitation_draft = self._get_member_draft(outing_id, "invitation")
         pairings_draft = self._get_member_draft(outing_id, "pairings")
+        revised_pairings_draft = self._get_member_draft(outing_id, "revised_pairings")
         course_hold_draft = self._get_course_draft(outing_id, "course_hold_request")
         course_final_draft = self._get_course_draft(outing_id, "course_final_schedule")
 
         rsvp_rows = self.rsvp_service.list_member_rsvps_for_outing(outing_id)
         assignments = self.outing_service.get_assignments(outing_id)
+
+        has_yes = any(str(row["status"] or "") == "yes" for row in rsvp_rows)
+        has_invited = bool(rsvp_rows)
 
         if self._is_sent(course_final_draft):
             return "final_sent_to_course"
@@ -409,10 +411,7 @@ class OutingWorkflowService:
         if assignments:
             return "schedule_generated"
 
-        if self._is_sent(course_hold_draft):
-            return "course_hold_sent"
-
-        if any(str(row["status"] or "") == "yes" for row in rsvp_rows):
+        if has_invited:
             return "rsvp_in_progress"
 
         if self._is_sent(invitation_draft):

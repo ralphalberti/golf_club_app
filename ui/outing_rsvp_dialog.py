@@ -1,8 +1,10 @@
 from PyQt5.QtGui import QBrush
 from ui.shared.forms import GuestFormDialog
-from PyQt5.QtCore import Qt, QSettings
+from ui.email_draft_dialog import EmailDraftDialog
+from PyQt5.QtCore import Qt, QSettings, QObject, QThread, pyqtSignal
 from PyQt5.QtWidgets import (
     QAbstractItemView,
+    QApplication,
     QComboBox,
     QDialog,
     QGridLayout,
@@ -13,6 +15,7 @@ from PyQt5.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QMessageBox,
+    QProgressDialog,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
@@ -49,29 +52,59 @@ MEMBER_EMAIL_TEMPLATES = [
 ]
 
 
+class EmailSendWorker(QObject):
+    finished = pyqtSignal(dict)
+    error = pyqtSignal(str)
+
+    def __init__(self, email_send_service, outing_id, template_type, member_ids):
+        super().__init__()
+        self.email_send_service = email_send_service
+        self.outing_id = outing_id
+        self.template_type = template_type
+        self.member_ids = member_ids
+
+    def run(self):
+        try:
+            result = self.email_send_service.send_draft_to_member_ids(
+                outing_id=self.outing_id,
+                template_type=self.template_type,
+                member_ids=self.member_ids,
+            )
+            self.finished.emit(result)
+        except Exception as e:
+            self.error.emit(str(e))
+
+
 class OutingRSVPDialog(QDialog):
     def __init__(
         self,
         outing_id: int,
+        outing,
         outing_service,
         rsvp_service,
         guest_service,
         email_send_service,
+        draft_service,
+        member_service,
         parent=None,
     ):
         super().__init__(parent)
         self.outing_id = outing_id
+        self.outing = outing
         self.outing_service = outing_service
         self.rsvp_service = rsvp_service
         self.guest_service = guest_service
         self.email_send_service = email_send_service
+        self.draft_service = draft_service
+        self.member_service = member_service
         self.settings = QSettings("GolfClubApp", "OutingManager")
         self.workflow_service = OutingWorkflowService(
             self.email_send_service.draft_service.repo.db
         )
 
         self.setWindowTitle("Manage RSVP")
-        self.resize(1200, 760)
+        self.resize(1500, 950)
+        self.setWindowState(self.windowState() | Qt.WindowMaximized)
 
         self.stage_combo = QComboBox()
         for stage in WORKFLOW_STAGES:
@@ -146,6 +179,46 @@ class OutingRSVPDialog(QDialog):
 
         self.eligible_summary_label = QLabel("RSVP Summary: --")
         self.recommended_next_step_label = QLabel("Recommended Next Step: --")
+        self.current_stage_value_label = QLabel("--")
+        self.outing_date_value_label = QLabel("--")
+        self.schedule_status_value_label = QLabel("--")
+        self.recommended_template_value_label = QLabel("--")
+
+        self.invitation_draft_status_value_label = QLabel("--")
+        self.pairings_draft_status_value_label = QLabel("--")
+        self.revised_pairings_draft_status_value_label = QLabel("--")
+        self.course_hold_draft_status_value_label = QLabel("--")
+        self.course_final_draft_status_value_label = QLabel("--")
+        self.revised_needed_status_value_label = QLabel("--")
+
+        # workflow_value_style = "font-weight: 600; color: #e6c65b;"
+        workflow_value_style = "font-weight: 600; color: #f5d76e;"
+        # workflow_value_style = "font-weight: 600; color: #ffd84d;"
+
+        for label in (
+            self.current_stage_value_label,
+            self.outing_date_value_label,
+            self.schedule_status_value_label,
+            self.recommended_template_value_label,
+            self.recommended_next_step_label,
+            self.invitation_draft_status_value_label,
+            self.pairings_draft_status_value_label,
+            self.revised_pairings_draft_status_value_label,
+            self.course_hold_draft_status_value_label,
+            self.course_final_draft_status_value_label,
+            self.revised_needed_status_value_label,
+        ):
+            label.setStyleSheet(workflow_value_style)
+
+        self.open_draft_editor_button = QPushButton("Open Draft Editor")
+        self.refresh_workflow_button = QPushButton("Refresh Workflow")
+        self.send_recommended_template_button = QPushButton("Send Email")
+
+        self.open_draft_editor_button.clicked.connect(self.open_draft_editor)
+        self.refresh_workflow_button.clicked.connect(self._refresh_workflow_guidance)
+        self.send_recommended_template_button.clicked.connect(
+            self.send_recommended_template
+        )
 
         main_layout = QVBoxLayout(self)
 
@@ -155,6 +228,100 @@ class OutingRSVPDialog(QDialog):
         stage_layout.addWidget(self.stage_combo)
         stage_layout.addWidget(self.save_stage_button)
         stage_layout.addStretch()
+
+        workflow_summary_box = QGroupBox("Workflow Summary")
+        workflow_summary_layout = QVBoxLayout(workflow_summary_box)
+
+        def summary_row(label_text, value_widget):
+            layout = QHBoxLayout()
+
+            label = QLabel(label_text + ":")
+            label.setStyleSheet("color: #aaaaaa;")
+
+            layout.addWidget(label)
+            layout.addSpacing(8)
+            layout.addWidget(value_widget)
+            layout.addStretch()
+
+            return layout
+
+        workflow_summary_layout.addLayout(
+            summary_row("Current Stage", self.current_stage_value_label)
+        )
+        workflow_summary_layout.addLayout(
+            summary_row("Outing Date", self.outing_date_value_label)
+        )
+        workflow_summary_layout.addLayout(
+            summary_row("Schedule Status", self.schedule_status_value_label)
+        )
+        workflow_summary_layout.addLayout(
+            summary_row("Recommended Template", self.recommended_template_value_label)
+        )
+        workflow_summary_layout.addLayout(
+            summary_row("Recommended Next Step", self.recommended_next_step_label)
+        )
+
+        communication_box = QGroupBox("Communication Status")
+        outer_communication_layout = QVBoxLayout(communication_box)
+
+        status_columns_layout = QHBoxLayout()
+        left_column = QVBoxLayout()
+        right_column = QVBoxLayout()
+
+        def status_row(label_text, value_widget):
+            layout = QHBoxLayout()
+
+            label = QLabel(label_text + ":")
+            label.setStyleSheet("color: #aaaaaa;")
+
+            layout.addWidget(label)
+            layout.addSpacing(8)
+            layout.addWidget(value_widget)
+            layout.addStretch()
+
+            return layout
+
+        left_column.addLayout(
+            status_row("Invitation Draft", self.invitation_draft_status_value_label)
+        )
+        left_column.addLayout(
+            status_row("Pairings Draft", self.pairings_draft_status_value_label)
+        )
+        left_column.addLayout(
+            status_row(
+                "Revised Pairings Draft",
+                self.revised_pairings_draft_status_value_label,
+            )
+        )
+
+        right_column.addLayout(
+            status_row("Course Hold Draft", self.course_hold_draft_status_value_label)
+        )
+        right_column.addLayout(
+            status_row("Course Final Draft", self.course_final_draft_status_value_label)
+        )
+        right_column.addLayout(
+            status_row(
+                "Revised Pairings Needed", self.revised_needed_status_value_label
+            )
+        )
+
+        status_columns_layout.addLayout(left_column, 1)
+        status_columns_layout.addSpacing(24)
+        status_columns_layout.addLayout(right_column, 1)
+
+        communication_button_row = QHBoxLayout()
+        communication_button_row.addWidget(self.open_draft_editor_button)
+        communication_button_row.addWidget(self.send_recommended_template_button)
+        communication_button_row.addWidget(self.refresh_workflow_button)
+        communication_button_row.addStretch()
+
+        outer_communication_layout.addLayout(status_columns_layout)
+        outer_communication_layout.addLayout(communication_button_row)
+
+        top_dashboard_row = QHBoxLayout()
+        top_dashboard_row.addWidget(workflow_summary_box, 1)
+        top_dashboard_row.addWidget(communication_box, 1)
 
         member_box = QGroupBox("Member RSVP Management")
         member_layout = QGridLayout(member_box)
@@ -204,12 +371,11 @@ class OutingRSVPDialog(QDialog):
         guest_layout.addLayout(guest_button_row)
 
         footer_row = QHBoxLayout()
-        footer_row.addWidget(self.recommended_next_step_label)
-        footer_row.addSpacing(20)
         footer_row.addWidget(self.eligible_summary_label)
         footer_row.addStretch()
 
         main_layout.addWidget(stage_box)
+        main_layout.addLayout(top_dashboard_row)
         main_layout.addWidget(member_box, 3)
         main_layout.addWidget(guest_box, 2)
         main_layout.addLayout(footer_row)
@@ -475,20 +641,42 @@ class OutingRSVPDialog(QDialog):
             self._selected_member_email_template(),
         )
 
+    def _force_member_email_template(self, template_type: str):
+        for index in range(self.member_email_template_combo.count()):
+            if self.member_email_template_combo.itemData(index) == template_type:
+                self.member_email_template_combo.setCurrentIndex(index)
+                return
+
     def _refresh_workflow_guidance(self):
         try:
             snapshot = self.workflow_service.get_workflow_snapshot(self.outing_id)
         except Exception:
-            self.recommended_next_step_label.setText("Recommended Next Step: --")
+            self.current_stage_value_label.setText("--")
+            self.outing_date_value_label.setText("--")
+            self.schedule_status_value_label.setText("--")
+            self.recommended_template_value_label.setText("--")
+            self.recommended_next_step_label.setText("--")
+
+            self.invitation_draft_status_value_label.setText("--")
+            self.pairings_draft_status_value_label.setText("--")
+            self.revised_pairings_draft_status_value_label.setText("--")
+            self.course_hold_draft_status_value_label.setText("--")
+            self.course_final_draft_status_value_label.setText("--")
+            self.revised_needed_status_value_label.setText("--")
+            self.send_recommended_template_button.setEnabled(False)
             return
+
+        self._update_workflow_summary_labels(snapshot)
+        self._update_communication_status_labels(snapshot)
+        self._update_shortcut_buttons(snapshot)
 
         recommended_template = str(
             snapshot.get("recommended_member_template", "invitation")
         )
-        self._set_member_email_template_if_available(recommended_template)
+        self._force_member_email_template(recommended_template)
 
         next_step = str(snapshot.get("recommended_next_step", "")).strip() or "--"
-        self.recommended_next_step_label.setText(f"Recommended Next Step: {next_step}")
+        self.recommended_next_step_label.setText(next_step)
 
     def _set_member_email_template_if_available(self, template_type: str):
         current_value = self._selected_member_email_template()
@@ -504,6 +692,98 @@ class OutingRSVPDialog(QDialog):
             if self.member_email_template_combo.itemData(index) == template_type:
                 self.member_email_template_combo.setCurrentIndex(index)
                 return
+
+    def _format_draft_status(self, status: str, sent_at: str) -> str:
+        status = str(status or "").strip()
+        sent_at = str(sent_at or "").strip()
+
+        if not status:
+            return "Missing"
+        if status == "sent":
+            return f"Sent ({sent_at})" if sent_at else "Sent"
+        return "Draft"
+
+    def _update_workflow_summary_labels(self, snapshot: dict):
+        current_stage = str(snapshot.get("current_stage", "")).strip() or "--"
+        outing_date = str(snapshot.get("outing_date", "")).strip() or "--"
+        has_assignments = bool(snapshot.get("schedule_generated", False))
+        schedule_status = "Generated" if has_assignments else "Not Generated"
+        recommended_template = (
+            str(snapshot.get("recommended_member_template", "")).strip() or "--"
+        )
+
+        self.current_stage_value_label.setText(current_stage)
+        self.outing_date_value_label.setText(outing_date)
+        self.schedule_status_value_label.setText(schedule_status)
+        self.recommended_template_value_label.setText(recommended_template)
+
+    def _update_communication_status_labels(self, snapshot: dict):
+        self.invitation_draft_status_value_label.setText(
+            self._format_draft_status(
+                snapshot.get("invitation_draft_status", ""),
+                snapshot.get("invitation_sent_at", ""),
+            )
+        )
+
+        self.pairings_draft_status_value_label.setText(
+            self._format_draft_status(
+                snapshot.get("pairings_draft_status", ""),
+                snapshot.get("pairings_sent_at", ""),
+            )
+        )
+
+        self.revised_pairings_draft_status_value_label.setText(
+            self._format_draft_status(
+                snapshot.get("revised_pairings_draft_status", ""),
+                snapshot.get("revised_pairings_sent_at", ""),
+            )
+        )
+
+        self.course_hold_draft_status_value_label.setText(
+            self._format_draft_status(
+                snapshot.get("course_hold_draft_status", ""),
+                snapshot.get("course_hold_sent_at", ""),
+            )
+        )
+
+        self.course_final_draft_status_value_label.setText(
+            self._format_draft_status(
+                snapshot.get("course_final_draft_status", ""),
+                snapshot.get("course_final_sent_at", ""),
+            )
+        )
+
+        self.revised_needed_status_value_label.setText(
+            "Yes" if bool(snapshot.get("schedule_revision_detected", False)) else "No"
+        )
+
+    def open_draft_editor(self):
+        try:
+            self.outing = self.outing_service.get_outing(self.outing_id)
+        except Exception as exc:
+            QMessageBox.warning(
+                self,
+                "Open Draft Editor Failed",
+                f"Could not reload outing.\n\n{exc}",
+            )
+            return
+
+        if not self.outing:
+            QMessageBox.warning(
+                self,
+                "Outing Not Found",
+                "Could not load the selected outing.",
+            )
+            return
+
+        dialog = EmailDraftDialog(
+            self.outing,
+            self.draft_service,
+            email_send_service=self.email_send_service,
+            parent=self,
+        )
+        dialog.exec_()
+        self.load_data()
 
     def update_selected_member_rsvps(self, status: str):
         member_ids = self._selected_member_rsvp_ids()
@@ -877,15 +1157,59 @@ class OutingRSVPDialog(QDialog):
             return
 
         try:
+            progress = QProgressDialog(
+                "Sending email to members...",
+                None,
+                0,
+                0,
+                self,
+            )
+            progress.setWindowTitle("Sending Email")
+            progress.setMinimumDuration(0)
+            progress.setCancelButton(None)
+            progress.setWindowModality(Qt.WindowModal)
+            progress.show()
+
+            QApplication.processEvents()
+
             result = self.email_send_service.send_draft_to_member_ids(
                 outing_id=self.outing_id,
                 template_type=template_type,
                 member_ids=member_ids,
             )
+            progress.close()
 
             sent_count = int(result.get("sent_count", 0))
             skipped_count = len(result.get("skipped", []))
             failed_count = len(result.get("failed", []))
+
+            # Trying out the new block
+            if template_type == "invitation" and sent_count > 0:
+                successfully_sent_member_ids = []
+                failed_member_ids = {
+                    int(row["member_id"])
+                    for row in result.get("failed", [])
+                    if "member_id" in row
+                }
+                skipped_member_ids = {
+                    int(row["member_id"])
+                    for row in result.get("skipped", [])
+                    if "member_id" in row
+                }
+
+                for member_id in member_ids:
+                    member_id = int(member_id)
+                    if member_id in failed_member_ids:
+                        continue
+                    if member_id in skipped_member_ids:
+                        continue
+                    successfully_sent_member_ids.append(member_id)
+
+                if successfully_sent_member_ids:
+                    self.rsvp_service.invite_members(
+                        self.outing_id,
+                        successfully_sent_member_ids,
+                    )
 
             message = (
                 f"SMTP accepted {sent_count} email(s).\n\n"
@@ -914,8 +1238,265 @@ class OutingRSVPDialog(QDialog):
             )
 
         except Exception as exc:
+            try:
+                progress.close()
+            except Exception:
+                pass
+
             QMessageBox.warning(
                 self,
                 "Send Failed",
                 f"Could not send email to selected members.\n\n{exc}",
             )
+
+    def _all_member_rsvp_ids(self):
+        member_ids = []
+
+        for row in range(self.member_rsvp_table.rowCount()):
+            member_item = self.member_rsvp_table.item(row, 0)
+            if member_item is None:
+                continue
+
+            member_id = member_item.data(DataRole.UserRole)
+            if member_id is None:
+                continue
+
+            member_ids.append(int(member_id))
+
+        seen = set()
+        unique_ids = []
+        for member_id in member_ids:
+            if member_id not in seen:
+                seen.add(member_id)
+                unique_ids.append(member_id)
+
+        return unique_ids
+
+    def _all_available_member_ids(self):
+        member_ids = []
+
+        for row in range(self.available_members_list.count()):
+            item = self.available_members_list.item(row)
+            if item is None:
+                continue
+
+            member_id = item.data(DataRole.UserRole)
+            if member_id is None:
+                continue
+
+            member_ids.append(int(member_id))
+
+        seen = set()
+        unique_ids = []
+
+        for member_id in member_ids:
+            if member_id not in seen:
+                seen.add(member_id)
+                unique_ids.append(member_id)
+
+        return unique_ids
+
+    def _all_active_member_ids(self):
+        rows = self.member_service.list_members(active_only=True)
+
+        member_ids = []
+        seen = set()
+
+        for row in rows:
+            member_id = int(row["id"])
+            if member_id not in seen:
+                seen.add(member_id)
+                member_ids.append(member_id)
+
+        return member_ids
+
+    def send_recommended_template(self):
+        try:
+            snapshot = self.workflow_service.get_workflow_snapshot(self.outing_id)
+        except Exception as exc:
+            QMessageBox.warning(
+                self,
+                "Workflow Unavailable",
+                f"Could not determine the recommended template.\n\n{exc}",
+            )
+            return
+
+        template_type = (
+            str(snapshot.get("recommended_member_template", "invitation")).strip()
+            or "invitation"
+        )
+
+        draft = self.draft_service.get_draft(
+            self.outing_id,
+            "member",
+            template_type,
+        )
+
+        if not draft:
+            QMessageBox.warning(
+                self,
+                "Draft Required",
+                f"No saved '{template_type}' draft exists yet.\n\n"
+                "Open Draft Editor and save a draft before sending email.",
+            )
+            return
+
+        if template_type == "invitation":
+            member_ids = self._all_available_member_ids()
+        elif template_type in {"pairings", "revised_pairings"}:
+            member_ids = self._all_active_member_ids()
+        else:
+            member_ids = []
+
+        if not member_ids:
+            QMessageBox.warning(
+                self,
+                "No Members Available",
+                "There are no members available to email.",
+            )
+            return
+
+        confirm = QMessageBox.question(
+            self,
+            "Send Email",
+            f"Send the saved '{template_type}' draft to {len(member_ids)} member(s)?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if confirm != QMessageBox.Yes:
+            return
+
+        try:
+            # 🔽 Create progress dialog
+            self.progress = QProgressDialog(
+                "Sending email to members...",
+                None,
+                0,
+                0,
+                self,
+            )
+            self.progress.setWindowTitle("Sending Email")
+            self.progress.setCancelButton(None)
+            self.progress.setWindowModality(Qt.WindowModal)
+            self.progress.show()
+
+            # 🔽 Setup thread + worker
+            self.thread = QThread()
+            self.worker = EmailSendWorker(
+                self.email_send_service,
+                self.outing_id,
+                template_type,
+                member_ids,
+            )
+
+            self.worker.moveToThread(self.thread)
+
+            # 🔽 Wire signals
+            self.thread.started.connect(self.worker.run)
+            self.worker.finished.connect(self._on_email_send_complete)
+            self.worker.error.connect(self._on_email_send_error)
+
+            # Cleanup
+            self.worker.finished.connect(self.thread.quit)
+            self.worker.finished.connect(self.worker.deleteLater)
+            self.thread.finished.connect(self.thread.deleteLater)
+
+            self._last_send_member_ids = list(member_ids)
+            self._last_send_template_type = template_type
+
+            self.thread.start()
+
+        except Exception as exc:
+            QMessageBox.warning(
+                self,
+                "Send Failed",
+                f"Could not send email.\n\n{exc}",
+            )
+
+    def _update_shortcut_buttons(self, snapshot: dict):
+        recommended_template = str(
+            snapshot.get("recommended_member_template", "")
+        ).strip()
+
+        available_member_count = self.available_members_list.count()
+        active_member_count = len(self.member_service.list_members(active_only=True))
+        schedule_generated = bool(snapshot.get("schedule_generated", False))
+
+        enable_send = False
+
+        if recommended_template == "invitation":
+            enable_send = available_member_count > 0
+
+        elif recommended_template in {"pairings", "revised_pairings"}:
+            enable_send = active_member_count > 0 and schedule_generated
+
+        self.send_recommended_template_button.setEnabled(enable_send)
+
+    def _on_email_send_complete(self, result: dict):
+        self.progress.close()
+
+        sent_count = int(result.get("sent_count", 0))
+        skipped_count = len(result.get("skipped", []))
+        failed_count = len(result.get("failed", []))
+
+        template_type = getattr(self, "_last_send_template_type", "")
+
+        if template_type == "invitation" and sent_count > 0:
+            attempted_member_ids = getattr(self, "_last_send_member_ids", [])
+            failed_ids = {
+                int(r["member_id"])
+                for r in result.get("failed", [])
+                if "member_id" in r
+            }
+            skipped_ids = {
+                int(r["member_id"])
+                for r in result.get("skipped", [])
+                if "member_id" in r
+            }
+
+            successful_ids = [
+                int(member_id)
+                for member_id in attempted_member_ids
+                if int(member_id) not in failed_ids
+                and int(member_id) not in skipped_ids
+            ]
+
+            if successful_ids:
+                self.rsvp_service.invite_members(self.outing_id, successful_ids)
+
+        message = (
+            f"SMTP accepted {sent_count} email(s).\n\n"
+            f"Skipped: {skipped_count}\n"
+            f"Failed: {failed_count}"
+        )
+
+        if skipped_count:
+            skipped_lines = [
+                f"- Member {row['member_id']}: {row['reason']}"
+                for row in result["skipped"][:10]
+            ]
+            message += "\n\nSkipped details:\n" + "\n".join(skipped_lines)
+
+        if failed_count:
+            failed_lines = [
+                f"- Member {row['member_id']} ({row.get('email', '')}): {row['error']}"
+                for row in result["failed"][:10]
+            ]
+            message += "\n\nFailed details:\n" + "\n".join(failed_lines)
+
+        QMessageBox.information(
+            self,
+            "Email Send Complete",
+            message,
+        )
+
+        self.load_data()
+
+    def _on_email_send_error(self, error_msg: str):
+        self.progress.close()
+
+        QMessageBox.warning(
+            self,
+            "Send Failed",
+            f"Could not send email.\n\n{error_msg}",
+        )

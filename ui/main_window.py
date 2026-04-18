@@ -1005,12 +1005,24 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "No selection", "Select an outing first.")
             return
 
+        outing = self.outing_service.get_outing(outing_id)
+        if not outing:
+            QMessageBox.warning(
+                self,
+                "Outing Not Found",
+                "Could not load the selected outing.",
+            )
+            return
+
         dlg = OutingRSVPDialog(
             outing_id=outing_id,
+            outing=outing,
             outing_service=self.outing_service,
             rsvp_service=self.rsvp_service,
             guest_service=self.guest_service,
             email_send_service=self.outing_email_send_service,
+            draft_service=self.outing_email_draft_service,
+            member_service=self.member_service,
             parent=self,
         )
         dlg.exec_()
@@ -1038,3 +1050,17 @@ class MainWindow(QMainWindow):
             parent=self,
         )
         dialog.exec_()
+
+    def _all_active_member_ids(self):
+        rows = self.member_service.list_members(active_only=True)
+
+        member_ids = []
+        seen = set()
+
+        for row in rows:
+            member_id = int(row["id"])
+            if member_id not in seen:
+                seen.add(member_id)
+                member_ids.append(member_id)
+
+        return member_ids
