@@ -179,44 +179,6 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.courses_table)
         return widget
 
-    # def _build_outings_tab(self):
-    #     widget = QWidget()
-    #     layout = QVBoxLayout(widget)
-    #     buttons = QHBoxLayout()
-    #
-    #     create_btn = QPushButton("Create Outing")
-    #     edit_btn = QPushButton("Edit Outing")
-    #     delete_btn = QPushButton("Delete Outing")
-    #     gen_btn = QPushButton("Generate Schedule")
-    #     edit_schedule_btn = QPushButton("Edit Schedule")
-    #     export_btn = QPushButton("Export PDF / CSV")
-    #     rsvp_btn = QPushButton("Manage RSVP")
-    #     edit_email_btn = QPushButton("Edit Email Draft")
-    #
-    #     create_btn.clicked.connect(self.add_outing)
-    #     edit_btn.clicked.connect(self.edit_outing)
-    #     delete_btn.clicked.connect(self.delete_outing)
-    #     gen_btn.clicked.connect(self.generate_schedule)
-    #     edit_schedule_btn.clicked.connect(self.edit_schedule)
-    #     export_btn.clicked.connect(self.export_outputs)
-    #     rsvp_btn.clicked.connect(self.manage_rsvp)
-    #     edit_email_btn.clicked.connect(self.open_email_draft_dialog)
-    #
-    #     buttons.addWidget(create_btn)
-    #     buttons.addWidget(edit_btn)
-    #     buttons.addWidget(delete_btn)
-    #     buttons.addWidget(rsvp_btn)
-    #     buttons.addWidget(gen_btn)
-    #     buttons.addWidget(edit_schedule_btn)
-    #     buttons.addWidget(export_btn)
-    #     buttons.addStretch()
-    #
-    #     layout.addLayout(buttons)
-    #     layout.addWidget(self.outings_table)
-    #     layout.addWidget(self.assignments_table)
-    #     layout.addWidget(edit_email_btn)
-    #     return widget
-
     def _build_outings_tab(self):
         widget = QWidget()
         layout = QVBoxLayout(widget)
@@ -229,7 +191,6 @@ class MainWindow(QMainWindow):
         edit_schedule_btn = QPushButton("Edit Schedule")
         export_btn = QPushButton("Export PDF / CSV")
         rsvp_btn = QPushButton("Manage RSVP")
-        edit_email_btn = QPushButton("Edit Email Draft")
 
         create_btn.clicked.connect(self.add_outing)
         edit_btn.clicked.connect(self.edit_outing)
@@ -238,7 +199,6 @@ class MainWindow(QMainWindow):
         edit_schedule_btn.clicked.connect(self.edit_schedule)
         export_btn.clicked.connect(self.export_outputs)
         rsvp_btn.clicked.connect(self.manage_rsvp)
-        edit_email_btn.clicked.connect(self.open_email_draft_dialog)
 
         buttons.addWidget(create_btn)
         buttons.addWidget(edit_btn)
@@ -252,7 +212,6 @@ class MainWindow(QMainWindow):
         layout.addLayout(buttons)
         layout.addWidget(self.outings_table)
         layout.addWidget(self.assignments_table)
-        layout.addWidget(edit_email_btn)
         return widget
 
     def refresh_all(self):

@@ -1,4 +1,5 @@
 from PyQt5.QtGui import QBrush
+from datetime import datetime
 from ui.shared.forms import GuestFormDialog
 from ui.email_draft_dialog import EmailDraftDialog
 from PyQt5.QtCore import Qt, QSettings, QObject, QThread, pyqtSignal
@@ -113,9 +114,13 @@ class OutingRSVPDialog(QDialog):
         self.save_stage_button = QPushButton("Save Stage")
         self.save_stage_button.clicked.connect(self.save_workflow_stage)
 
+        # Eventually clean up the hidden buttons. Maybe include via setup function
         self.invite_all_button = QPushButton("Invite All Active Members")
         self.invite_selected_button = QPushButton("Invite Selected")
+        self.invite_all_button.hide()
+        self.invite_selected_button.hide()
         self.remove_invite_button = QPushButton("Remove Invite")
+        self.remove_invite_button.hide()
         self.send_selected_email_button = QPushButton("Send Selected Members Email")
 
         self.mark_member_invited_button = QPushButton("Reset to Pending")
@@ -183,6 +188,7 @@ class OutingRSVPDialog(QDialog):
         self.outing_date_value_label = QLabel("--")
         self.schedule_status_value_label = QLabel("--")
         self.recommended_template_value_label = QLabel("--")
+        self.outing_summary_label = QLabel("--")
 
         self.invitation_draft_status_value_label = QLabel("--")
         self.pairings_draft_status_value_label = QLabel("--")
@@ -196,6 +202,7 @@ class OutingRSVPDialog(QDialog):
         # workflow_value_style = "font-weight: 600; color: #ffd84d;"
 
         for label in (
+            self.outing_summary_label,
             self.current_stage_value_label,
             self.outing_date_value_label,
             self.schedule_status_value_label,
@@ -211,11 +218,11 @@ class OutingRSVPDialog(QDialog):
             label.setStyleSheet(workflow_value_style)
 
         self.open_draft_editor_button = QPushButton("Open Draft Editor")
-        self.refresh_workflow_button = QPushButton("Refresh Workflow")
+        self.generate_schedule_button = QPushButton("Generate Schedule")
         self.send_recommended_template_button = QPushButton("Send Email")
 
         self.open_draft_editor_button.clicked.connect(self.open_draft_editor)
-        self.refresh_workflow_button.clicked.connect(self._refresh_workflow_guidance)
+        self.generate_schedule_button.clicked.connect(self.generate_schedule_from_rsvp)
         self.send_recommended_template_button.clicked.connect(
             self.send_recommended_template
         )
@@ -246,10 +253,10 @@ class OutingRSVPDialog(QDialog):
             return layout
 
         workflow_summary_layout.addLayout(
-            summary_row("Current Stage", self.current_stage_value_label)
+            summary_row("Outing", self.outing_summary_label)
         )
         workflow_summary_layout.addLayout(
-            summary_row("Outing Date", self.outing_date_value_label)
+            summary_row("Current Stage", self.current_stage_value_label)
         )
         workflow_summary_layout.addLayout(
             summary_row("Schedule Status", self.schedule_status_value_label)
@@ -313,7 +320,7 @@ class OutingRSVPDialog(QDialog):
         communication_button_row = QHBoxLayout()
         communication_button_row.addWidget(self.open_draft_editor_button)
         communication_button_row.addWidget(self.send_recommended_template_button)
-        communication_button_row.addWidget(self.refresh_workflow_button)
+        communication_button_row.addWidget(self.generate_schedule_button)
         communication_button_row.addStretch()
 
         outer_communication_layout.addLayout(status_columns_layout)
@@ -328,7 +335,7 @@ class OutingRSVPDialog(QDialog):
 
         left_panel = QWidget()
         left_layout = QVBoxLayout(left_panel)
-        left_layout.addWidget(QLabel("Active Members Not Yet Invited"))
+        left_layout.addWidget(QLabel("Active Members"))
         left_layout.addWidget(self.available_members_list)
 
         left_button_row = QHBoxLayout()
@@ -652,7 +659,7 @@ class OutingRSVPDialog(QDialog):
             snapshot = self.workflow_service.get_workflow_snapshot(self.outing_id)
         except Exception:
             self.current_stage_value_label.setText("--")
-            self.outing_date_value_label.setText("--")
+            # self.outing_date_value_label.setText("--")
             self.schedule_status_value_label.setText("--")
             self.recommended_template_value_label.setText("--")
             self.recommended_next_step_label.setText("--")
@@ -699,19 +706,51 @@ class OutingRSVPDialog(QDialog):
 
         if not status:
             return "Missing"
+
         if status == "sent":
-            return f"Sent ({sent_at})" if sent_at else "Sent"
+            if sent_at:
+                formatted_sent_at = self._format_datetime_mmddyyyy_ampm(sent_at)
+                return f"Sent ({formatted_sent_at})"
+            return "Sent"
+
         return "Draft"
+
+    def _format_datetime_mmddyyyy_ampm(self, value: str) -> str:
+        raw = str(value or "").strip()
+        if not raw:
+            return "--"
+
+        try:
+            dt = datetime.fromisoformat(raw.replace(" ", "T"))
+            return dt.strftime("%m-%d-%Y @ %I:%M %p")
+        except ValueError:
+            return raw
 
     def _update_workflow_summary_labels(self, snapshot: dict):
         current_stage = str(snapshot.get("current_stage", "")).strip() or "--"
-        outing_date = str(snapshot.get("outing_date", "")).strip() or "--"
+        outing_date_raw = str(snapshot.get("outing_date", "")).strip()
+        outing_date = self._format_mmddyyyy(outing_date_raw)
         has_assignments = bool(snapshot.get("schedule_generated", False))
         schedule_status = "Generated" if has_assignments else "Not Generated"
         recommended_template = (
             str(snapshot.get("recommended_member_template", "")).strip() or "--"
         )
 
+        course_name = ""
+        if self.outing is not None:
+            try:
+                course_name = str(self.outing["course_name"] or "").strip()
+            except Exception:
+                course_name = ""
+
+        if course_name and outing_date != "--":
+            outing_summary = f"{course_name} — {outing_date}"
+        elif outing_date != "--":
+            outing_summary = outing_date
+        else:
+            outing_summary = "--"
+
+        self.outing_summary_label.setText(outing_summary)
         self.current_stage_value_label.setText(current_stage)
         self.outing_date_value_label.setText(outing_date)
         self.schedule_status_value_label.setText(schedule_status)
@@ -760,6 +799,7 @@ class OutingRSVPDialog(QDialog):
     def open_draft_editor(self):
         try:
             self.outing = self.outing_service.get_outing(self.outing_id)
+            snapshot = self.workflow_service.get_workflow_snapshot(self.outing_id)
         except Exception as exc:
             QMessageBox.warning(
                 self,
@@ -776,12 +816,24 @@ class OutingRSVPDialog(QDialog):
             )
             return
 
+        recommended_template = (
+            str(snapshot.get("recommended_member_template", "invitation")).strip()
+            or "invitation"
+        )
+
         dialog = EmailDraftDialog(
             self.outing,
             self.draft_service,
             email_send_service=self.email_send_service,
             parent=self,
         )
+        dialog.audience_combo.setCurrentText("member")
+
+        for index in range(dialog.template_combo.count()):
+            if dialog.template_combo.itemText(index) == recommended_template:
+                dialog.template_combo.setCurrentIndex(index)
+                break
+
         dialog.exec_()
         self.load_data()
 
@@ -1102,11 +1154,13 @@ class OutingRSVPDialog(QDialog):
 
             if is_scheduled:
                 schedule_state = "Scheduled"
-            elif is_yes:
+            elif is_yes and assignment_rows:
                 schedule_state = "Waitlist"
                 waitlist_position = str(
                     waitlist_position_by_member_id.get(member_id, "")
                 )
+            elif is_yes:
+                schedule_state = "Confirmed"
 
             dashboard_rows.append(
                 {
@@ -1133,6 +1187,19 @@ class OutingRSVPDialog(QDialog):
             return (2, row["member_name"].lower())
 
         return sorted(dashboard_rows, key=sort_key)
+
+    def _format_mmddyyyy(self, value: str) -> str:
+        raw = str(value or "").strip()
+        if not raw:
+            return "--"
+
+        parts = raw.split("-")
+        if len(parts) == 3:
+            year, month, day = parts
+            if len(year) == 4:
+                return f"{month}-{day}-{year}"
+
+        return raw
 
     def send_email_to_selected_members(self):
         member_ids = self._selected_member_rsvp_ids()
@@ -1421,16 +1488,23 @@ class OutingRSVPDialog(QDialog):
         available_member_count = self.available_members_list.count()
         active_member_count = len(self.member_service.list_members(active_only=True))
         schedule_generated = bool(snapshot.get("schedule_generated", False))
+        should_generate_schedule_now = bool(
+            snapshot.get("should_generate_schedule_now", False)
+        )
+        confirmed_count = int(snapshot.get("yes_count", 0) or 0)
 
         enable_send = False
 
         if recommended_template == "invitation":
             enable_send = available_member_count > 0
-
         elif recommended_template in {"pairings", "revised_pairings"}:
             enable_send = active_member_count > 0 and schedule_generated
 
         self.send_recommended_template_button.setEnabled(enable_send)
+        self.generate_schedule_button.setEnabled(
+            (not schedule_generated)
+            and (should_generate_schedule_now or confirmed_count > 0)
+        )
 
     def _on_email_send_complete(self, result: dict):
         self.progress.close()
@@ -1500,3 +1574,22 @@ class OutingRSVPDialog(QDialog):
             "Send Failed",
             f"Could not send email.\n\n{error_msg}",
         )
+
+    def generate_schedule_from_rsvp(self):
+        try:
+            parent = self.parent()
+
+            if parent is not None and hasattr(parent, "generate_schedule"):
+                parent.generate_schedule()
+            else:
+                raise RuntimeError("Main window does not expose generate_schedule().")
+
+            self.outing = self.outing_service.get_outing(self.outing_id)
+            self.load_data()
+
+        except Exception as exc:
+            QMessageBox.warning(
+                self,
+                "Generate Schedule Failed",
+                f"Could not generate schedule.\n\n{exc}",
+            )
