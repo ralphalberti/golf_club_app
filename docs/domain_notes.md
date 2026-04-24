@@ -30,8 +30,6 @@
 - Valid for a time period
 - Change seasonally
 
-### System Design
-
 - course_fee_schedules table:
   - course_id
   - fee
