@@ -282,3 +282,13 @@ Admin must always know:
 - Email delivery tracking and retry
 - Waitlist UI
 - Automated scheduling trigger after RSVP cutoff
+
+---
+
+## Domain Gaps Before Schema
+
+- Course contacts
+- Dated course fee schedules
+- Member suspensions
+- Scheduling eligibility
+- Outing snapshots
