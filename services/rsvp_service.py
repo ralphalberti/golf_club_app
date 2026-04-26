@@ -19,6 +19,31 @@ class RsvpResult:
     message: str
 
 
+@dataclass(frozen=True)
+class RsvpGuest:
+    id: int
+    name: str
+
+
+@dataclass(frozen=True)
+class RsvpContext:
+    token: str
+    invitation_id: int
+    outing_id: int
+    member_id: int
+    member_name: str
+    member_email: str
+    play_date: str
+    course_name: str
+    green_fee_cents: int
+    workflow_state: str
+    current_response: str | None
+    responded_at: str | None
+    guests: list[RsvpGuest]
+    can_rsvp: bool
+    message: str
+
+
 class RsvpService:
     def __init__(self, db_path: Path | str = "app.db") -> None:
         self.db_path = Path(db_path)
@@ -451,3 +476,73 @@ class RsvpService:
             """,
             [(scheduling_unit_id, guest["id"], guest["name"]) for guest in guests],
         )
+
+    def get_rsvp_context(self, token: str) -> RsvpContext:
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA foreign_keys = ON;")
+
+            invitation = self._load_invitation(conn, token)
+            outing = self._load_outing(conn, invitation["outing_id"])
+            member = self._load_member(conn, invitation["member_id"])
+
+            existing_rsvp = self._load_existing_rsvp(
+                conn,
+                outing_id=outing["id"],
+                member_id=member["id"],
+            )
+
+            guest_rows = conn.execute(
+                """
+                SELECT id, name
+                FROM guests
+                WHERE outing_id = ?
+                  AND sponsor_member_id = ?
+                ORDER BY id
+                """,
+                (outing["id"], member["id"]),
+            ).fetchall()
+
+            guests = [
+                RsvpGuest(
+                    id=int(row["id"]),
+                    name=row["name"],
+                )
+                for row in guest_rows
+            ]
+
+            member_name = f"{member['first_name']} {member['last_name']}"
+
+            can_rsvp = member["active"] == 1 and outing["workflow_state"] not in {
+                "completed",
+                "cancelled",
+            }
+
+            if member["active"] != 1:
+                message = "Inactive members cannot RSVP."
+            elif outing["workflow_state"] in {"completed", "cancelled"}:
+                message = "This outing is no longer accepting RSVPs."
+            else:
+                message = "RSVP is available."
+
+            return RsvpContext(
+                token=token,
+                invitation_id=int(invitation["id"]),
+                outing_id=int(outing["id"]),
+                member_id=int(member["id"]),
+                member_name=member_name,
+                member_email=member["email"],
+                play_date=outing["play_date"],
+                course_name=outing["course_name_snapshot"],
+                green_fee_cents=int(outing["green_fee_cents_snapshot"]),
+                workflow_state=outing["workflow_state"],
+                current_response=(
+                    existing_rsvp["response"] if existing_rsvp is not None else None
+                ),
+                responded_at=(
+                    existing_rsvp["responded_at"] if existing_rsvp is not None else None
+                ),
+                guests=guests,
+                can_rsvp=can_rsvp,
+                message=message,
+            )
