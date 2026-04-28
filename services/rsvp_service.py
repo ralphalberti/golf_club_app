@@ -269,6 +269,25 @@ class RsvpService:
         sponsor_member_id: int,
         guests: list[str],
     ) -> None:
+        existing_unit = conn.execute(
+            """
+            SELECT id
+            FROM scheduling_units
+            WHERE outing_id = ?
+              AND sponsor_member_id = ?
+            """,
+            (outing_id, sponsor_member_id),
+        ).fetchone()
+
+        if existing_unit is not None:
+            conn.execute(
+                """
+                DELETE FROM scheduling_unit_players
+                WHERE scheduling_unit_id = ?
+                """,
+                (existing_unit["id"],),
+            )
+
         conn.execute(
             """
             DELETE FROM guests
