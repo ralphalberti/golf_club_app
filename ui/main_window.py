@@ -465,117 +465,28 @@ class MainWindow(QMainWindow):
 
     def refresh_assignments(self):
         outing_id = self.selected_row_id(self.outings_table)
-        rows = self.outing_service.get_assignments(outing_id) if outing_id else []
 
-        guest_rows = (
-            self.guest_service.list_schedulable_outing_guests(outing_id)
-            if outing_id
-            else []
-        )
+        if not outing_id:
+            self.assignments_table.clear()
+            self.assignments_table.setRowCount(0)
+            self.assignments_table.setColumnCount(0)
+            return
 
-        guests_by_sponsor: dict[int, list] = {}
-        for guest_row in guest_rows:
-            sponsor_id = int(guest_row["sponsoring_member_id"])
-            guests_by_sponsor.setdefault(sponsor_id, []).append(guest_row)
-
-        self.assignments_table.clear()
-        self.assignments_table.setRowCount(0)
-        self.assignments_table.setColumnCount(5)
-        self.assignments_table.setHorizontalHeaderLabels(
-            ["Tee Time", "First Name", "Last Name", "Email", "Handicap"]
-        )
-
-        previous_tee_time = None
-        display_row_idx = 0
-
-        for row in rows:
-            current_tee_time = str(row["tee_time"] or "")
-            show_tee_time = current_tee_time != previous_tee_time
-
-            self.assignments_table.insertRow(display_row_idx)
-
-            tee_time_item = QTableWidgetItem(current_tee_time if show_tee_time else "")
-            tee_time_item.setData(DataRole.UserRole, row["id"])
-            tee_time_item.setTextAlignment(Align.AlignCenter)
-
-            first_name_item = QTableWidgetItem(str(row["first_name"] or ""))
-            first_name_item.setTextAlignment(Align.AlignVCenter | Align.AlignLeft)
-
-            last_name_item = QTableWidgetItem(str(row["last_name"] or ""))
-            last_name_item.setTextAlignment(Align.AlignVCenter | Align.AlignLeft)
-
-            email_item = QTableWidgetItem(str(row["email"] or ""))
-            email_item.setTextAlignment(Align.AlignVCenter | Align.AlignLeft)
-
-            handicap_value = "" if row["handicap"] is None else str(row["handicap"])
-            handicap_item = QTableWidgetItem(handicap_value)
-            handicap_item.setTextAlignment(Align.AlignCenter)
-
-            if show_tee_time:
-                font = QFont()
-                font.setBold(True)
-                tee_time_item.setFont(font)
-
-            self.assignments_table.setItem(display_row_idx, 0, tee_time_item)
-            self.assignments_table.setItem(display_row_idx, 1, first_name_item)
-            self.assignments_table.setItem(display_row_idx, 2, last_name_item)
-            self.assignments_table.setItem(display_row_idx, 3, email_item)
-            self.assignments_table.setItem(display_row_idx, 4, handicap_item)
-
-            sponsor_member_id = int(row["member_id"])
-            display_row_idx += 1
-
-            for guest_row in guests_by_sponsor.get(sponsor_member_id, []):
-                self.assignments_table.insertRow(display_row_idx)
-
-                guest_tee_time_item = QTableWidgetItem("")
-                guest_first_name_item = QTableWidgetItem(
-                    f"↳ {str(guest_row['first_name'] or '')}"
-                )
-                guest_last_name_item = QTableWidgetItem(
-                    str(guest_row["last_name"] or "")
-                )
-                guest_email_item = QTableWidgetItem("")
-                guest_handicap_item = QTableWidgetItem("")
-
-                guest_font = QFont()
-                guest_font.setItalic(True)
-                guest_brush = QBrush(QColor("#1e90ff"))
-
-                guest_tee_time_item.setTextAlignment(Align.AlignCenter)
-                guest_first_name_item.setTextAlignment(
-                    Align.AlignVCenter | Align.AlignLeft
-                )
-                guest_last_name_item.setTextAlignment(
-                    Align.AlignVCenter | Align.AlignLeft
-                )
-                guest_email_item.setTextAlignment(Align.AlignVCenter | Align.AlignLeft)
-                guest_handicap_item.setTextAlignment(Align.AlignCenter)
-
-                for item in (
-                    guest_tee_time_item,
-                    guest_first_name_item,
-                    guest_last_name_item,
-                    guest_email_item,
-                    guest_handicap_item,
-                ):
-                    item.setFont(guest_font)
-                    item.setForeground(guest_brush)
-
-                self.assignments_table.setItem(display_row_idx, 0, guest_tee_time_item)
-                self.assignments_table.setItem(
-                    display_row_idx, 1, guest_first_name_item
-                )
-                self.assignments_table.setItem(display_row_idx, 2, guest_last_name_item)
-                self.assignments_table.setItem(display_row_idx, 3, guest_email_item)
-                self.assignments_table.setItem(display_row_idx, 4, guest_handicap_item)
-
-                display_row_idx += 1
-
-            previous_tee_time = current_tee_time
-
-        self.assignments_table.resizeColumnsToContents()
-        self.assignments_table.horizontalHeader().setStretchLastSection(True)
+        try:
+            schedule = self.scheduling_service.get_schedule(outing_id)
+            self._render_schedule(schedule)
+        except Exception as exc:
+            self.assignments_table.clear()
+            self.assignments_table.setRowCount(0)
+            self.assignments_table.setColumnCount(1)
+            self.assignments_table.setHorizontalHeaderLabels(["Schedule"])
+            self.assignments_table.insertRow(0)
+            self.assignments_table.setItem(
+                0,
+                0,
+                QTableWidgetItem(f"No schedule available: {exc}"),
+            )
+            self.assignments_table.resizeColumnsToContents()
 
     def add_member(self):
         dlg = MemberFormDialog()
@@ -779,17 +690,21 @@ class MainWindow(QMainWindow):
             return
 
         try:
-            self.scheduling_service.generate_schedule(outing_id)
+            result = self.scheduling_service.generate_schedule(outing_id)
+            schedule = self.scheduling_service.get_schedule(outing_id)
 
             self.load_outings()
             self.select_outing_row_by_id(outing_id)
-            self.refresh_assignments()
+            self._render_schedule(schedule)
             self.assignments_table.setFocus()
 
             QMessageBox.information(
                 self,
                 "Schedule generated",
-                "The outing schedule has been generated.",
+                f"The outing schedule has been generated.\n\n"
+                f"Scheduled units: {result.scheduled_unit_count}\n"
+                f"Waitlisted units: {result.waitlisted_unit_count}\n"
+                f"Open slots: {result.open_slot_count}",
             )
         except Exception as exc:
             QMessageBox.warning(
@@ -1023,3 +938,53 @@ class MainWindow(QMainWindow):
                 member_ids.append(member_id)
 
         return member_ids
+
+    def _render_schedule(self, schedule):
+        self.assignments_table.clear()
+        self.assignments_table.setRowCount(0)
+        self.assignments_table.setColumnCount(5)
+        self.assignments_table.setHorizontalHeaderLabels(
+            ["Tee Time", "First Name", "Last Name", "Email", "Handicap"]
+        )
+
+        row_idx = 0
+
+        for tee_time_group in schedule:
+            tee_time = tee_time_group["tee_time"]
+            players = tee_time_group["players"]
+
+            if players:
+                for player in players:
+                    self.assignments_table.insertRow(row_idx)
+
+                    self.assignments_table.setItem(
+                        row_idx, 0, QTableWidgetItem(tee_time)
+                    )
+                    self.assignments_table.setItem(
+                        row_idx, 1, QTableWidgetItem(str(player["first_name"] or ""))
+                    )
+                    self.assignments_table.setItem(
+                        row_idx, 2, QTableWidgetItem(str(player["last_name"] or ""))
+                    )
+                    self.assignments_table.setItem(
+                        row_idx, 3, QTableWidgetItem(str(player["email"] or ""))
+                    )
+                    self.assignments_table.setItem(
+                        row_idx,
+                        4,
+                        QTableWidgetItem(
+                            ""
+                            if player["handicap"] is None
+                            else str(player["handicap"])
+                        ),
+                    )
+
+                    row_idx += 1
+            else:
+                self.assignments_table.insertRow(row_idx)
+                self.assignments_table.setItem(row_idx, 0, QTableWidgetItem(tee_time))
+                self.assignments_table.setItem(row_idx, 1, QTableWidgetItem("(open)"))
+                row_idx += 1
+
+        self.assignments_table.resizeColumnsToContents()
+        self.assignments_table.horizontalHeader().setStretchLastSection(True)

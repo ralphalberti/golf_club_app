@@ -866,3 +866,23 @@ class SchedulingService:
             sponsor_groups=current_groups,
             sponsor_member_ids=member_ids,
         )
+
+    def get_schedule(self, outing_id: int):
+        assignments = self.outing_repo.get_assignments(outing_id)
+        tee_times = self.outing_repo.get_tee_times(outing_id)
+
+        tee_time_map = {}
+
+        for row in assignments:
+            tee_time = str(row["tee_time"] or "")
+            tee_time_map.setdefault(tee_time, []).append(row)
+
+        result = []
+
+        for tt in tee_times:
+            tee_time_str = str(tt["tee_time"])
+            players = tee_time_map.get(tee_time_str, [])
+
+            result.append({"tee_time": tee_time_str, "players": players})
+
+        return result

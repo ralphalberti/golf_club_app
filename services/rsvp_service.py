@@ -45,8 +45,11 @@ class RsvpContext:
 
 
 class RsvpService:
-    def __init__(self, db_path: Path | str = "app.db") -> None:
-        self.db_path = Path(db_path)
+    def __init__(self, db_path: Path | str | object = "app.db") -> None:
+        self.db = db_path if not isinstance(db_path, (str, Path)) else None
+        self.db_path = (
+            Path(db_path) if isinstance(db_path, (str, Path)) else Path("app.db")
+        )
 
     def submit_rsvp(
         self,
@@ -565,3 +568,96 @@ class RsvpService:
                 can_rsvp=can_rsvp,
                 message=message,
             )
+
+    def get_schedulable_member_ids(self, outing_id: int) -> list[int]:
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA foreign_keys = ON;")
+
+            rows = conn.execute(
+                """
+                SELECT member_id
+                FROM rsvps
+                WHERE outing_id = ?
+                  AND response = 'yes'
+                ORDER BY responded_at ASC, id ASC
+                """,
+                (outing_id,),
+            ).fetchall()
+
+            return [int(row["member_id"]) for row in rows]
+
+    def get_outing_workflow_stage(self, outing_id: int) -> str:
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA foreign_keys = ON;")
+
+            row = conn.execute(
+                """
+                SELECT workflow_state
+                FROM outings
+                WHERE id = ?
+                """,
+                (outing_id,),
+            ).fetchone()
+
+            return row["workflow_state"] if row else "unknown"
+
+    def list_uninvited_active_members_for_outing(self, outing_id: int):
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA foreign_keys = ON;")
+
+            rows = conn.execute(
+                """
+                SELECT
+                    m.id,
+                    m.first_name,
+                    m.last_name,
+                    m.email,
+                    m.phone
+                FROM members m
+                WHERE m.active = 1
+                  AND m.id NOT IN (
+                      SELECT member_id
+                      FROM outing_invitations
+                      WHERE outing_id = ?
+                  )
+                ORDER BY m.last_name ASC, m.first_name ASC
+                """,
+                (outing_id,),
+            ).fetchall()
+
+            return rows
+
+    def list_member_rsvps_for_outing(self, outing_id: int):
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA foreign_keys = ON;")
+
+            rows = conn.execute(
+                """
+                SELECT
+                    m.id AS member_id,
+                    m.first_name,
+                    m.last_name,
+                    m.email,
+                    m.phone,
+                    COALESCE(r.response, '') AS status,
+                    r.responded_at,
+                    '' AS note
+                FROM members m
+                LEFT JOIN rsvps r
+                    ON r.member_id = m.id
+                   AND r.outing_id = ?
+                WHERE m.active = 1
+                ORDER BY m.last_name ASC, m.first_name ASC
+                """,
+                (outing_id,),
+            ).fetchall()
+
+            return rows
+
+
+# Backward-compatible alias for existing app imports.
+RSVPService = RsvpService
