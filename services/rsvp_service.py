@@ -45,11 +45,9 @@ class RsvpContext:
 
 
 class RsvpService:
-    def __init__(self, db_path: Path | str | object = "app.db") -> None:
-        self.db = db_path if not isinstance(db_path, (str, Path)) else None
-        self.db_path = (
-            Path(db_path) if isinstance(db_path, (str, Path)) else Path("app.db")
-        )
+    def __init__(self, db) -> None:
+        self.db = db
+        self.db_path = Path(db.path)
 
     def submit_rsvp(
         self,
@@ -570,16 +568,16 @@ class RsvpService:
             )
 
     def get_schedulable_member_ids(self, outing_id: int) -> list[int]:
-        with sqlite3.connect(self.db_path) as conn:
-            conn.row_factory = sqlite3.Row
-            conn.execute("PRAGMA foreign_keys = ON;")
+        with self.db.get_conn() as conn:
+            # with sqlite3.connect(self.db_path) as conn:
+            #     conn.row_factory = sqlite3.Row
 
             rows = conn.execute(
                 """
                 SELECT member_id
-                FROM rsvps
+                FROM outing_rsvps
                 WHERE outing_id = ?
-                  AND response = 'yes'
+                  AND status = 'yes'
                 ORDER BY responded_at ASC, id ASC
                 """,
                 (outing_id,),
@@ -587,27 +585,46 @@ class RsvpService:
 
             return [int(row["member_id"]) for row in rows]
 
+    # def get_outing_workflow_stage(self, outing_id: int) -> str:
+    #     with self.db.get_conn() as conn:
+    #
+    #         row = conn.execute(
+    #             """
+    #             SELECT workflow_state
+    #             FROM outings
+    #             WHERE id = ?
+    #             """,
+    #             (outing_id,),
+    #         ).fetchone()
+    #
+    #         return row["workflow_state"] if row else "unknown"
     def get_outing_workflow_stage(self, outing_id: int) -> str:
-        with sqlite3.connect(self.db_path) as conn:
-            conn.row_factory = sqlite3.Row
-            conn.execute("PRAGMA foreign_keys = ON;")
-
+        with self.db.get_conn() as conn:
             row = conn.execute(
                 """
-                SELECT workflow_state
+                SELECT workflow_stage
                 FROM outings
                 WHERE id = ?
                 """,
                 (outing_id,),
             ).fetchone()
 
-            return row["workflow_state"] if row else "unknown"
+            return row["workflow_stage"] if row else "draft"
+
+    def set_outing_workflow_stage(self, outing_id: int, workflow_stage: str) -> None:
+        with self.db.get_conn() as conn:
+            conn.execute(
+                """
+                UPDATE outings
+                SET workflow_stage = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (workflow_stage, outing_id),
+            )
 
     def list_uninvited_active_members_for_outing(self, outing_id: int):
-        with sqlite3.connect(self.db_path) as conn:
-            conn.row_factory = sqlite3.Row
-            conn.execute("PRAGMA foreign_keys = ON;")
-
+        with self.db.get_conn() as conn:
             rows = conn.execute(
                 """
                 SELECT
@@ -620,7 +637,7 @@ class RsvpService:
                 WHERE m.active = 1
                   AND m.id NOT IN (
                       SELECT member_id
-                      FROM outing_invitations
+                      FROM outing_rsvps
                       WHERE outing_id = ?
                   )
                 ORDER BY m.last_name ASC, m.first_name ASC
@@ -631,10 +648,7 @@ class RsvpService:
             return rows
 
     def list_member_rsvps_for_outing(self, outing_id: int):
-        with sqlite3.connect(self.db_path) as conn:
-            conn.row_factory = sqlite3.Row
-            conn.execute("PRAGMA foreign_keys = ON;")
-
+        with self.db.get_conn() as conn:
             rows = conn.execute(
                 """
                 SELECT
@@ -643,20 +657,125 @@ class RsvpService:
                     m.last_name,
                     m.email,
                     m.phone,
-                    COALESCE(r.response, '') AS status,
+                    r.status,
                     r.responded_at,
-                    '' AS note
-                FROM members m
-                LEFT JOIN rsvps r
-                    ON r.member_id = m.id
-                   AND r.outing_id = ?
-                WHERE m.active = 1
-                ORDER BY m.last_name ASC, m.first_name ASC
+                    COALESCE(r.note, '') AS note
+                FROM outing_rsvps r
+                JOIN members m
+                    ON m.id = r.member_id
+                WHERE r.outing_id = ?
+                  AND m.active = 1
+                ORDER BY
+                    CASE
+                        WHEN r.status = 'yes' AND r.responded_at IS NOT NULL THEN 0
+                        WHEN r.status = 'yes' THEN 1
+                        WHEN r.status = 'invited' THEN 2
+                        WHEN r.status = 'maybe' THEN 3
+                        WHEN r.status = 'no' THEN 4
+                        ELSE 5
+                    END,
+                    r.responded_at ASC,
+                    r.id ASC,
+                    m.last_name ASC,
+                    m.first_name ASC
                 """,
                 (outing_id,),
             ).fetchall()
 
             return rows
+
+    def set_member_rsvp_status(
+        self,
+        outing_id: int,
+        member_id: int,
+        status: str,
+        note: str = "",
+    ) -> None:
+        status = status.strip().lower()
+
+        if status not in {"invited", "yes", "no", "maybe", ""}:
+            raise ValueError("Invalid RSVP status.")
+
+        with self.db.get_conn() as conn:
+
+            if status == "":
+                conn.execute(
+                    """
+                    DELETE FROM outing_rsvps
+                    WHERE outing_id = ?
+                      AND member_id = ?
+                    """,
+                    (outing_id, member_id),
+                )
+                return
+
+            existing = conn.execute(
+                """
+                SELECT id
+                FROM outing_rsvps
+                WHERE outing_id = ?
+                  AND member_id = ?
+                """,
+                (outing_id, member_id),
+            ).fetchone()
+
+            if existing is None:
+                conn.execute(
+                    """
+                    INSERT INTO outing_rsvps (
+                        outing_id,
+                        member_id,
+                        status,
+                        responded_at,
+                        note,
+                        created_at,
+                        updated_at
+                    )
+                    VALUES (?, ?, ?, CURRENT_TIMESTAMP, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                    """,
+                    (outing_id, member_id, status, note),
+                )
+            else:
+                conn.execute(
+                    """
+                    UPDATE outing_rsvps
+                    SET status = ?,
+                        responded_at = CURRENT_TIMESTAMP,
+                        note = ?,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                    """,
+                    (status, note, existing["id"]),
+                )
+
+    def invite_members(self, outing_id: int, member_ids: list[int]) -> None:
+        with self.db.get_conn() as conn:
+
+            for member_id in member_ids:
+                existing = conn.execute(
+                    """
+                    SELECT id
+                    FROM outing_rsvps
+                    WHERE outing_id = ?
+                      AND member_id = ?
+                    """,
+                    (outing_id, member_id),
+                ).fetchone()
+
+                if existing is None:
+                    conn.execute(
+                        """
+                        INSERT INTO outing_rsvps (
+                            outing_id,
+                            member_id,
+                            status,
+                            created_at,
+                            updated_at
+                        )
+                        VALUES (?, ?, 'invited', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                        """,
+                        (outing_id, member_id),
+                    )
 
 
 # Backward-compatible alias for existing app imports.
