@@ -89,3 +89,13 @@
   - completing end-to-end RSVP → Schedule flow
   - stabilizing current system
 - All items above should be implemented in **separate feature branches**
+
+---
+
+### Disable Manual Member Invitation from RSVP Dialog
+
+- [ ] Disable double-click behavior from Active Members pane
+- [ ] Keep manual move controls hidden or admin/test-only
+- [ ] Invitation list should be populated by invitation workflow
+- [ ] Eligible recipients should be all active, non-suspended members
+- [ ] Ensure selecting/moving members does not remove them from email recipient pool before invitations are sent

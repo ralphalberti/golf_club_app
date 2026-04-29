@@ -168,9 +168,9 @@ class OutingRSVPDialog(QDialog):
         self.available_members_list.setSelectionMode(
             ListSelectionMode.ExtendedSelection
         )
-        self.available_members_list.itemDoubleClicked.connect(
-            self.invite_double_clicked_member
-        )
+        # self.available_members_list.itemDoubleClicked.connect(
+        #     self.invite_double_clicked_member
+        # )
 
         self.member_rsvp_table = QTableWidget()
         self.member_rsvp_table.setSelectionBehavior(SelectionBehavior.SelectRows)
