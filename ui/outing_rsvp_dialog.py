@@ -24,6 +24,7 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 from services.outing_workflow_service import OutingWorkflowService
+from ui.shared.messages import show_error, show_info, show_warning
 
 DataRole = Qt.ItemDataRole
 SelectionBehavior = QTableWidget.SelectionBehavior
@@ -415,7 +416,7 @@ class OutingRSVPDialog(QDialog):
             )
             QMessageBox.information(self, "Stage Saved", "Workflow stage updated.")
         except Exception as exc:
-            QMessageBox.warning(
+            show_warning(
                 self,
                 "Save Failed",
                 f"Could not update workflow stage.\n\n{exc}",
@@ -565,7 +566,7 @@ class OutingRSVPDialog(QDialog):
             self.rsvp_service.invite_all_active_members(self.outing_id)
             self.load_data()
         except Exception as exc:
-            QMessageBox.warning(
+            show_warning(
                 self,
                 "Invite Failed",
                 f"Could not invite active members.\n\n{exc}",
@@ -574,7 +575,7 @@ class OutingRSVPDialog(QDialog):
     def invite_selected_members(self):
         items = self.available_members_list.selectedItems()
         if not items:
-            QMessageBox.warning(
+            show_warning(
                 self,
                 "No Selection",
                 "Select one or more members to invite.",
@@ -587,7 +588,7 @@ class OutingRSVPDialog(QDialog):
             self.rsvp_service.invite_members(self.outing_id, member_ids)
             self.load_data()
         except Exception as exc:
-            QMessageBox.warning(
+            show_warning(
                 self,
                 "Invite Failed",
                 f"Could not invite selected members.\n\n{exc}",
@@ -602,7 +603,7 @@ class OutingRSVPDialog(QDialog):
             self.rsvp_service.invite_members(self.outing_id, [member_id])
             self.load_data()
         except Exception as exc:
-            QMessageBox.warning(
+            show_warning(
                 self,
                 "Invite Failed",
                 f"Could not invite member.\n\n{exc}",
@@ -804,7 +805,7 @@ class OutingRSVPDialog(QDialog):
             self.outing = self.outing_service.get_outing(self.outing_id)
             snapshot = self.workflow_service.get_workflow_snapshot(self.outing_id)
         except Exception as exc:
-            QMessageBox.warning(
+            show_warning(
                 self,
                 "Open Draft Editor Failed",
                 f"Could not reload outing.\n\n{exc}",
@@ -812,7 +813,7 @@ class OutingRSVPDialog(QDialog):
             return
 
         if not self.outing:
-            QMessageBox.warning(
+            show_warning(
                 self,
                 "Outing Not Found",
                 "Could not load the selected outing.",
@@ -843,7 +844,7 @@ class OutingRSVPDialog(QDialog):
     def update_selected_member_rsvps(self, status: str):
         member_ids = self._selected_member_rsvp_ids()
         if not member_ids:
-            QMessageBox.warning(
+            show_warning(
                 self,
                 "No Selection",
                 "Select one or more RSVP rows first.",
@@ -860,7 +861,7 @@ class OutingRSVPDialog(QDialog):
             self.load_data()
             self._warn_if_schedule_invalid_after_guest_change()
         except Exception as exc:
-            QMessageBox.warning(
+            show_warning(
                 self,
                 "Update Failed",
                 f"Could not update member RSVP status.\n\n{exc}",
@@ -869,7 +870,7 @@ class OutingRSVPDialog(QDialog):
     def remove_selected_member_rsvps(self):
         member_ids = self._selected_member_rsvp_ids()
         if not member_ids:
-            QMessageBox.warning(
+            show_warning(
                 self,
                 "No Selection",
                 "Select one or more RSVP rows first.",
@@ -892,7 +893,7 @@ class OutingRSVPDialog(QDialog):
             self.load_data()
             self._warn_if_schedule_invalid_after_guest_change()
         except Exception as exc:
-            QMessageBox.warning(
+            show_warning(
                 self,
                 "Remove Failed",
                 f"Could not remove selected invite(s).\n\n{exc}",
@@ -920,7 +921,7 @@ class OutingRSVPDialog(QDialog):
             self.outing_id
         )
         if not member_rsvp_rows:
-            QMessageBox.warning(
+            show_warning(
                 self,
                 "No Sponsors Available",
                 "Invite at least one member before adding a guest.",
@@ -976,7 +977,7 @@ class OutingRSVPDialog(QDialog):
             try:
                 guest_id = int(guest_choice.rsplit("(id:", 1)[1].rstrip(")"))
             except (IndexError, ValueError):
-                QMessageBox.warning(
+                show_warning(
                     self,
                     "Invalid Guest Selection",
                     "Could not determine the selected guest.",
@@ -1004,7 +1005,7 @@ class OutingRSVPDialog(QDialog):
             self.load_data()
             self._warn_if_schedule_invalid_after_guest_change()
         except Exception as exc:
-            QMessageBox.warning(
+            show_warning(
                 self,
                 "Guest Add Failed",
                 f"Could not add guest to outing.\n\n{exc}",
@@ -1013,7 +1014,7 @@ class OutingRSVPDialog(QDialog):
     def update_selected_guest_statuses(self, status: str):
         guest_ids = self._selected_guest_ids()
         if not guest_ids:
-            QMessageBox.warning(
+            show_warning(
                 self,
                 "No Selection",
                 "Select one or more guest rows first.",
@@ -1030,7 +1031,7 @@ class OutingRSVPDialog(QDialog):
             self.load_data()
             self._warn_if_schedule_invalid_after_guest_change()
         except Exception as exc:
-            QMessageBox.warning(
+            show_warning(
                 self,
                 "Update Failed",
                 f"Could not update guest status.\n\n{exc}",
@@ -1039,7 +1040,7 @@ class OutingRSVPDialog(QDialog):
     def remove_selected_guests(self):
         guest_ids = self._selected_guest_ids()
         if not guest_ids:
-            QMessageBox.warning(
+            show_warning(
                 self,
                 "No Selection",
                 "Select one or more guest rows first.",
@@ -1062,7 +1063,7 @@ class OutingRSVPDialog(QDialog):
             self.load_data()
             self._warn_if_schedule_invalid_after_guest_change()
         except Exception as exc:
-            QMessageBox.warning(
+            show_warning(
                 self,
                 "Remove Failed",
                 f"Could not remove guest(s) from outing.\n\n{exc}",
@@ -1071,7 +1072,7 @@ class OutingRSVPDialog(QDialog):
     def edit_selected_guest(self):
         guest_ids = self._selected_guest_ids()
         if not guest_ids:
-            QMessageBox.warning(
+            show_warning(
                 self,
                 "No Selection",
                 "Select one guest row first.",
@@ -1079,7 +1080,7 @@ class OutingRSVPDialog(QDialog):
             return
 
         if len(guest_ids) > 1:
-            QMessageBox.warning(
+            show_warning(
                 self,
                 "Multiple Guests Selected",
                 "Select only one guest to edit.",
@@ -1089,7 +1090,7 @@ class OutingRSVPDialog(QDialog):
         guest_id = guest_ids[0]
         guest = self.guest_service.get_guest(guest_id)
         if not guest:
-            QMessageBox.warning(
+            show_warning(
                 self,
                 "Guest Not Found",
                 "The selected guest record could not be found.",
@@ -1116,7 +1117,7 @@ class OutingRSVPDialog(QDialog):
             except Exception:
                 pass
 
-            QMessageBox.warning(
+            show_warning(
                 self,
                 "Schedule Needs Revision",
                 "This guest change makes the current schedule invalid.\n\n"
@@ -1207,7 +1208,7 @@ class OutingRSVPDialog(QDialog):
     def send_email_to_selected_members(self):
         member_ids = self._selected_member_rsvp_ids()
         if not member_ids:
-            QMessageBox.warning(
+            show_warning(
                 self,
                 "No Selection",
                 "Select one or more member RSVP rows first.",
@@ -1313,7 +1314,7 @@ class OutingRSVPDialog(QDialog):
             except Exception:
                 pass
 
-            QMessageBox.warning(
+            show_warning(
                 self,
                 "Send Failed",
                 f"Could not send email to selected members.\n\n{exc}",
@@ -1384,7 +1385,7 @@ class OutingRSVPDialog(QDialog):
         try:
             snapshot = self.workflow_service.get_workflow_snapshot(self.outing_id)
         except Exception as exc:
-            QMessageBox.warning(
+            show_warning(
                 self,
                 "Workflow Unavailable",
                 f"Could not determine the recommended template.\n\n{exc}",
@@ -1403,7 +1404,7 @@ class OutingRSVPDialog(QDialog):
         )
 
         if not draft:
-            QMessageBox.warning(
+            show_warning(
                 self,
                 "Draft Required",
                 f"No saved '{template_type}' draft exists yet.\n\n"
@@ -1419,7 +1420,7 @@ class OutingRSVPDialog(QDialog):
             member_ids = []
 
         if not member_ids:
-            QMessageBox.warning(
+            show_warning(
                 self,
                 "No Members Available",
                 "There are no members available to email.",
@@ -1477,7 +1478,7 @@ class OutingRSVPDialog(QDialog):
             self.thread.start()
 
         except Exception as exc:
-            QMessageBox.warning(
+            show_warning(
                 self,
                 "Send Failed",
                 f"Could not send email.\n\n{exc}",
@@ -1572,7 +1573,7 @@ class OutingRSVPDialog(QDialog):
     def _on_email_send_error(self, error_msg: str):
         self.progress.close()
 
-        QMessageBox.warning(
+        show_warning(
             self,
             "Send Failed",
             f"Could not send email.\n\n{error_msg}",
@@ -1591,7 +1592,7 @@ class OutingRSVPDialog(QDialog):
             self.load_data()
 
         except Exception as exc:
-            QMessageBox.warning(
+            show_warning(
                 self,
                 "Generate Schedule Failed",
                 f"Could not generate schedule.\n\n{exc}",
