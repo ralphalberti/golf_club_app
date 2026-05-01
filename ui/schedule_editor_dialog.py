@@ -14,6 +14,7 @@ from PyQt5.QtWidgets import (
     QVBoxLayout,
 )
 from services.outing_workflow_service import OutingWorkflowService
+from ui.shared.messages import show_error, show_info, show_warning
 
 DataRole = Qt.ItemDataRole
 DropAction = Qt.DropAction
@@ -75,7 +76,7 @@ class AssignmentsTreeWidget(QTreeWidget):
         )
 
         if projected_size > max_players:
-            QMessageBox.warning(
+            show_warning(
                 self,
                 "Tee Time Full",
                 "That move would exceed the tee time capacity once sponsor guests are included.",
@@ -377,7 +378,7 @@ class ScheduleEditorDialog(QDialog):
 
             if expanded_count > max_players:
                 if show_message:
-                    QMessageBox.warning(
+                    show_warning(
                         self,
                         "Too Many Players",
                         "A tee time exceeds capacity once sponsor guests are included.",
@@ -393,7 +394,7 @@ class ScheduleEditorDialog(QDialog):
                 member_id = int(child.data(0, DataRole.UserRole + 1))
                 if member_id in seen_member_ids:
                     if show_message:
-                        QMessageBox.warning(
+                        show_warning(
                             self,
                             "Duplicate Player",
                             "The same player appears more than once in the outing.",
@@ -508,13 +509,13 @@ class ScheduleEditorDialog(QDialog):
         group_item = self.get_selected_group_item()
 
         if not member_items:
-            QMessageBox.warning(
+            show_warning(
                 self, "No Member Selected", "Select one or more members to add."
             )
             return
 
         if not group_item:
-            QMessageBox.warning(
+            show_warning(
                 self,
                 "No Tee Time Selected",
                 "Select a tee time group on the right.",
@@ -526,7 +527,7 @@ class ScheduleEditorDialog(QDialog):
         available_slots = max_players - current_size
 
         if available_slots <= 0:
-            QMessageBox.warning(
+            show_warning(
                 self,
                 "Tee Time Full",
                 "That tee time is already full.",
@@ -550,7 +551,7 @@ class ScheduleEditorDialog(QDialog):
                 skipped_members.append(member_name)
 
         if not members_to_add:
-            QMessageBox.warning(
+            show_warning(
                 self,
                 "Tee Time Full",
                 "None of the selected players fit once sponsor guests are included.",
@@ -618,7 +619,7 @@ class ScheduleEditorDialog(QDialog):
             player_items.append(item)
 
         if not player_items:
-            QMessageBox.warning(
+            show_warning(
                 self,
                 "No Player Selected",
                 "Select one or more assigned sponsor/member rows to remove.",
@@ -630,7 +631,7 @@ class ScheduleEditorDialog(QDialog):
         }
 
         if len(parent_group_ids) != 1:
-            QMessageBox.warning(
+            show_warning(
                 self,
                 "Mixed Tee Times Selected",
                 "Select players from only one tee time at a time.",
@@ -730,7 +731,7 @@ class ScheduleEditorDialog(QDialog):
 
         group_item = self.get_selected_group_item()
         if not group_item:
-            QMessageBox.warning(
+            show_warning(
                 self,
                 "No Tee Time Selected",
                 "Select a tee time group on the right.",
@@ -744,7 +745,7 @@ class ScheduleEditorDialog(QDialog):
         unit_size = self._unit_size_for_member(member_id)
 
         if current_size + unit_size > max_players:
-            QMessageBox.warning(
+            show_warning(
                 self,
                 "Tee Time Full",
                 "This tee time is full. The player cannot be added.",
@@ -832,7 +833,7 @@ class ScheduleEditorDialog(QDialog):
             self.load_available_members()
             self.load_assignments_tree()
         except Exception as exc:
-            QMessageBox.warning(
+            show_warning(
                 self,
                 "Reshuffle Failed",
                 f"Could not reshuffle the schedule.\n\n{exc}",
