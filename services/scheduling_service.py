@@ -43,6 +43,15 @@ class SchedulingService:
         if not member_ids:
             raise ValueError("No members provided for scheduling.")
 
+        member_ids = self._first_member_ids_that_fit_capacity(
+            outing_id=outing_id,
+            tee_times=tee_times,
+            member_ids=member_ids,
+        )
+
+        if not member_ids:
+            raise ValueError("No members fit within the available tee-time capacity.")
+
         member_map = self._get_member_map(member_ids)
 
         groups = self._build_best_groups(
@@ -55,7 +64,7 @@ class SchedulingService:
             current_groups=None,
             mode="moderate",
             enforce_units=True,
-            enforced_member_ids=None,
+            enforced_member_ids=member_ids,
         )
 
         groups = self._order_groups_for_tee_times(
@@ -64,7 +73,11 @@ class SchedulingService:
             enforced_member_ids=None,
         )
 
-        self.unit_service.validate_expanded_groups(outing_id, groups)
+        self.unit_service.validate_expanded_groups_for_member_ids(
+            outing_id,
+            groups,
+            member_ids,
+        )
 
         self.outing_repo.replace_assignments(outing_id, groups)
         self.outing_repo.increment_version(outing_id)
@@ -818,6 +831,69 @@ class SchedulingService:
             shuffled.extend(bucket)
 
         return shuffled
+
+    def _limit_member_ids_to_tee_time_capacity(
+        self,
+        outing_id: int,
+        tee_times,
+        member_ids: list[int],
+    ) -> list[int]:
+        capacity = sum(int(row["max_players"]) for row in tee_times)
+
+        if capacity <= 0:
+            return []
+
+        unit_map = self.unit_service.build_unit_map_for_outing(outing_id)
+
+        selected_member_ids: list[int] = []
+        used_capacity = 0
+
+        for member_id in member_ids:
+            unit_size = self._unit_size_for_member(member_id, unit_map)
+
+            if unit_size <= 0:
+                continue
+
+            if unit_size > max(int(row["max_players"]) for row in tee_times):
+                continue
+
+            if used_capacity + unit_size > capacity:
+                continue
+
+            selected_member_ids.append(member_id)
+            used_capacity += unit_size
+
+        return selected_member_ids
+
+    def _first_member_ids_that_fit_capacity(
+        self,
+        outing_id: int,
+        tee_times,
+        member_ids: list[int],
+    ) -> list[int]:
+        capacity = sum(int(row["max_players"]) for row in tee_times)
+        if capacity <= 0:
+            return []
+
+        unit_map = self.unit_service.build_unit_map_for_outing(outing_id)
+
+        selected_member_ids: list[int] = []
+        used_capacity = 0
+
+        for member_id in member_ids:
+            unit = unit_map.get(member_id)
+            if unit is None:
+                continue
+
+            unit_size = len(unit.participants)
+
+            if used_capacity + unit_size > capacity:
+                break
+
+            selected_member_ids.append(member_id)
+            used_capacity += unit_size
+
+        return selected_member_ids
 
     def validate_existing_schedule(self, outing_id: int) -> None:
         """

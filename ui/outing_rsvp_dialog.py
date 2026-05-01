@@ -223,6 +223,9 @@ class OutingRSVPDialog(QDialog):
 
         self.open_draft_editor_button.clicked.connect(self.open_draft_editor)
         self.generate_schedule_button.clicked.connect(self.generate_schedule_from_rsvp)
+        # Temporarily hide the Generate Schedule button
+        self.generate_schedule_button.setVisible(False)
+        self.generate_schedule_button.setEnabled(False)
         self.send_recommended_template_button.clicked.connect(
             self.send_recommended_template
         )
@@ -320,7 +323,7 @@ class OutingRSVPDialog(QDialog):
         communication_button_row = QHBoxLayout()
         communication_button_row.addWidget(self.open_draft_editor_button)
         communication_button_row.addWidget(self.send_recommended_template_button)
-        communication_button_row.addWidget(self.generate_schedule_button)
+        # communication_button_row.addWidget(self.generate_schedule_button)
         communication_button_row.addStretch()
 
         outer_communication_layout.addLayout(status_columns_layout)

@@ -89,7 +89,7 @@ class MainWindow(QMainWindow):
         # Tabs
         self.tabs.addTab(self._build_members_tab(), "Members")
         self.tabs.addTab(self._build_courses_tab(), "Courses")
-        self.tabs.addTab(self._build_outings_tab(), "Outings / Schedules")
+        self.tabs.addTab(self._build_outings_tab(), "Outings")
 
         # Signals
         self.tabs.currentChanged.connect(self._on_tab_changed)
@@ -189,7 +189,7 @@ class MainWindow(QMainWindow):
         delete_btn = QPushButton("Delete Outing")
         gen_btn = QPushButton("Generate Schedule")
         edit_schedule_btn = QPushButton("Edit Schedule")
-        export_btn = QPushButton("Export PDF / CSV")
+        export_btn = QPushButton("Export Schedule")
         rsvp_btn = QPushButton("Manage RSVP")
 
         create_btn.clicked.connect(self.add_outing)
@@ -200,13 +200,16 @@ class MainWindow(QMainWindow):
         export_btn.clicked.connect(self.export_outputs)
         rsvp_btn.clicked.connect(self.manage_rsvp)
 
+        # Buttons add block
         buttons.addWidget(create_btn)
         buttons.addWidget(edit_btn)
         buttons.addWidget(delete_btn)
+
         buttons.addWidget(rsvp_btn)
         buttons.addWidget(gen_btn)
         buttons.addWidget(edit_schedule_btn)
         buttons.addWidget(export_btn)
+
         buttons.addStretch()
 
         layout.addLayout(buttons)
@@ -701,11 +704,24 @@ class MainWindow(QMainWindow):
             QMessageBox.information(
                 self,
                 "Schedule generated",
-                f"The outing schedule has been generated.\n\n"
-                f"Scheduled units: {result.scheduled_unit_count}\n"
-                f"Waitlisted units: {result.waitlisted_unit_count}\n"
-                f"Open slots: {result.open_slot_count}",
+                "The outing schedule has been generated.",
             )
+            # result = self.scheduling_service.generate_schedule(outing_id)
+            # schedule = self.scheduling_service.get_schedule(outing_id)
+            #
+            # self.load_outings()
+            # self.select_outing_row_by_id(outing_id)
+            # self._render_schedule(schedule)
+            # self.assignments_table.setFocus()
+            #
+            # QMessageBox.information(
+            #     self,
+            #     "Schedule generated",
+            #     f"The outing schedule has been generated.\n\n"
+            #     f"Scheduled units: {result.scheduled_unit_count}\n"
+            #     f"Waitlisted units: {result.waitlisted_unit_count}\n"
+            #     f"Open slots: {result.open_slot_count}",
+            # )
         except Exception as exc:
             QMessageBox.warning(
                 self,

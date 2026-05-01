@@ -405,6 +405,7 @@ class ScheduleEditorDialog(QDialog):
 
     def persist_tree_structure(self):
         grouped_member_ids = []
+        previously_assigned_member_ids = self._assigned_member_ids_for_outing()
 
         for i in range(self.assignments_tree.topLevelItemCount()):
             group_item = self.assignments_tree.topLevelItem(i)
@@ -420,8 +421,19 @@ class ScheduleEditorDialog(QDialog):
 
             grouped_member_ids.append(member_ids)
 
+        # Not sure this is the correct placement
+        current_assigned_member_ids = {
+            member_id for group in grouped_member_ids for member_id in group
+        }
+
+        removed_member_ids = (
+            previously_assigned_member_ids - current_assigned_member_ids
+        )
+        # end block
+
         try:
             self.outing_service.replace_assignments(self.outing_id, grouped_member_ids)
+            self._mark_removed_members_as_invited(removed_member_ids)
             new_stage = self._sync_workflow_after_schedule_change()
             self.load_available_members()
             self.load_assignments_tree()
@@ -441,6 +453,44 @@ class ScheduleEditorDialog(QDialog):
                 f"Could not save the updated schedule.\n\n{exc}",
             )
             self.load_assignments_tree()
+
+    def _assigned_member_ids_for_outing(self) -> set[int]:
+        db = self.outing_service.repo.db
+
+        with db.get_conn() as conn:
+            rows = conn.execute(
+                """
+                SELECT tta.member_id
+                FROM tee_time_assignments tta
+                JOIN tee_times tt
+                    ON tt.id = tta.tee_time_id
+                WHERE tt.outing_id = ?
+                """,
+                (self.outing_id,),
+            ).fetchall()
+
+            return {int(row["member_id"]) for row in rows}
+
+    def _mark_removed_members_as_invited(self, member_ids: set[int]) -> None:
+        if not member_ids:
+            return
+
+        db = self.outing_service.repo.db
+
+        with db.get_conn() as conn:
+            for member_id in member_ids:
+                conn.execute(
+                    """
+                    UPDATE outing_rsvps
+                    SET status = 'invited',
+                        note = 'Removed from schedule by admin',
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE outing_id = ?
+                      AND member_id = ?
+                      AND status = 'yes'
+                    """,
+                    (self.outing_id, member_id),
+                )
 
     def _sync_workflow_after_schedule_change(self):
         try:
@@ -602,6 +652,7 @@ class ScheduleEditorDialog(QDialog):
 
         for item in player_items:
             member_id = int(item.data(0, DataRole.UserRole + 1))
+            self._mark_member_removed_from_schedule(member_id)
             self._remove_sponsor_and_guest_rows(parent, member_id)
 
         self.update_group_label(parent)
@@ -612,6 +663,30 @@ class ScheduleEditorDialog(QDialog):
 
         self.persist_tree_structure()
         self.select_group_by_tee_time_id(selected_tee_time_id)
+
+    def _mark_member_removed_from_schedule(self, member_id: int) -> None:
+        """
+        Admin removed this member from the schedule.
+
+        Current schema does not yet support a dedicated 'cancelled' RSVP status,
+        so we move the member out of 'yes' and back to 'invited'. This prevents
+        the RSVP dashboard from treating the member as waitlisted.
+        """
+        db = self.outing_service.repo.db
+
+        with db.get_conn() as conn:
+            conn.execute(
+                """
+                UPDATE outing_rsvps
+                SET status = 'invited',
+                    note = 'Removed from schedule by admin',
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE outing_id = ?
+                  AND member_id = ?
+                  AND status = 'yes'
+                """,
+                (self.outing_id, member_id),
+            )
 
     def _remove_sponsor_and_guest_rows(self, group_item, member_id: int):
         indices_to_remove = []
@@ -672,7 +747,7 @@ class ScheduleEditorDialog(QDialog):
             QMessageBox.warning(
                 self,
                 "Tee Time Full",
-                "That player does not fit once sponsor guests are included.",
+                "This tee time is full. The player cannot be added.",
             )
             return
 

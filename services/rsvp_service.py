@@ -777,6 +777,55 @@ class RsvpService:
                         (outing_id, member_id),
                     )
 
+    def record_yes_if_first(self, outing_id: int, member_id: int) -> None:
+        """
+        Record a YES RSVP from an email token/link.
+
+        If the member is already YES, preserve the original responded_at timestamp.
+        Otherwise set status to YES and timestamp the response.
+        """
+        with self.db.get_conn() as conn:
+            existing = conn.execute(
+                """
+                SELECT id, status, responded_at
+                FROM outing_rsvps
+                WHERE outing_id = ?
+                  AND member_id = ?
+                """,
+                (outing_id, member_id),
+            ).fetchone()
+
+            if existing is None:
+                conn.execute(
+                    """
+                    INSERT INTO outing_rsvps (
+                        outing_id,
+                        member_id,
+                        status,
+                        responded_at,
+                        created_at,
+                        updated_at
+                    )
+                    VALUES (?, ?, 'yes', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                    """,
+                    (outing_id, member_id),
+                )
+                return
+
+            if existing["status"] == "yes":
+                return
+
+            conn.execute(
+                """
+                UPDATE outing_rsvps
+                SET status = 'yes',
+                    responded_at = CURRENT_TIMESTAMP,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (existing["id"],),
+            )
+
 
 # Backward-compatible alias for existing app imports.
 RSVPService = RsvpService
