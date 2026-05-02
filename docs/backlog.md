@@ -367,3 +367,15 @@
 - [ ] If admin selects a lower-ranked waitlisted player first:
   - show warning/confirmation
   - allow override with note
+
+  ---
+
+### Prevent Accidental Schedule Regeneration
+
+- [ ] Detect when an outing already has tee time assignments
+- [ ] Warn admin before regenerating schedule
+- [ ] Default confirmation button should be `No`
+- [ ] Message should explain that regenerating replaces existing tee time assignments
+- [ ] Consider separate actions:
+  - Generate Schedule
+  - Regenerate Schedule

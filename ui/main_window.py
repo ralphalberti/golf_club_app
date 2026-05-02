@@ -22,6 +22,7 @@ from ui.settings_dialog import SettingsDialog
 from ui.shared.forms import MemberFormDialog, CourseFormDialog, OutingFormDialog
 from ui.outing_rsvp_dialog import OutingRSVPDialog
 from ui.email_draft_dialog import EmailDraftDialog
+from ui.shared.messages import show_error, show_info, show_warning
 
 Align = Qt.AlignmentFlag
 DataRole = Qt.ItemDataRole
@@ -501,7 +502,7 @@ class MainWindow(QMainWindow):
     def edit_member(self):
         member_id = self.selected_row_id(self.members_table)
         if not member_id:
-            QMessageBox.warning(self, "No selection", "Select a member first.")
+            show_warning(self, "No selection", "Select a member first.")
             return
 
         member, _ = self.member_service.get_member(member_id)
@@ -514,7 +515,7 @@ class MainWindow(QMainWindow):
     def delete_member(self):
         member_id = self.selected_row_id(self.members_table)
         if not member_id:
-            QMessageBox.warning(self, "No selection", "Select a member first.")
+            show_warning(self, "No selection", "Select a member first.")
             return
 
         confirm = QMessageBox.question(
@@ -559,7 +560,7 @@ class MainWindow(QMainWindow):
     def edit_course(self):
         course_id = self.selected_row_id(self.courses_table)
         if not course_id:
-            QMessageBox.warning(self, "No selection", "Select a course first.")
+            show_warning(self, "No selection", "Select a course first.")
             return
 
         course = self.course_service.get_course(course_id)
@@ -572,7 +573,7 @@ class MainWindow(QMainWindow):
     def delete_course(self):
         course_id = self.selected_row_id(self.courses_table)
         if not course_id:
-            QMessageBox.warning(self, "No selection", "Select a course first.")
+            show_warning(self, "No selection", "Select a course first.")
             return
 
         confirm = QMessageBox.question(
@@ -601,7 +602,7 @@ class MainWindow(QMainWindow):
     def add_outing(self):
         courses = self.course_service.list_courses()
         if not courses:
-            QMessageBox.warning(self, "No courses", "Create at least one course first.")
+            show_warning(self, "No courses", "Create at least one course first.")
             return
 
         dlg = OutingFormDialog(courses)
@@ -615,7 +616,7 @@ class MainWindow(QMainWindow):
     def edit_outing(self):
         outing_id = self.selected_row_id(self.outings_table)
         if not outing_id:
-            QMessageBox.warning(self, "No selection", "Select an outing first.")
+            show_warning(self, "No selection", "Select an outing first.")
             return
 
         outing = self.outing_service.get_outing(outing_id)
@@ -633,7 +634,7 @@ class MainWindow(QMainWindow):
     def delete_outing(self):
         outing_id = self.selected_row_id(self.outings_table)
         if not outing_id:
-            QMessageBox.warning(self, "No selection", "Select an outing first.")
+            show_warning(self, "No selection", "Select an outing first.")
             return
 
         confirm = QMessageBox.question(
@@ -665,14 +666,27 @@ class MainWindow(QMainWindow):
     def generate_schedule(self):
         outing_id = self.selected_row_id(self.outings_table)
         if not outing_id:
-            QMessageBox.warning(self, "No outing selected", "Select an outing first.")
+            show_warning(self, "No outing selected", "Select an outing first.")
             return
+
+        if self.outing_has_assignments(outing_id):
+            confirm = QMessageBox.question(
+                self,
+                "Schedule Already Exists",
+                "This outing already has a generated schedule. Regenerating it will replace "
+                "the current tee time assignments.\n\nDo you want to continue?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+
+            if confirm != QMessageBox.Yes:
+                return
 
         eligible_member_ids = set(
             self.rsvp_service.get_schedulable_member_ids(outing_id)
         )
         if not eligible_member_ids:
-            QMessageBox.warning(
+            show_warning(
                 self,
                 "No RSVP Players",
                 "No members with RSVP status 'yes' are available to schedule for this outing.",
@@ -685,7 +699,7 @@ class MainWindow(QMainWindow):
         ]
 
         if not eligible_members:
-            QMessageBox.warning(
+            show_warning(
                 self,
                 "No Eligible Players",
                 "No active RSVP 'yes' members are available to schedule for this outing.",
@@ -723,16 +737,20 @@ class MainWindow(QMainWindow):
             #     f"Open slots: {result.open_slot_count}",
             # )
         except Exception as exc:
-            QMessageBox.warning(
+            show_warning(
                 self,
                 "Generate Schedule Failed",
                 f"Could not generate the schedule.\n\n{exc}",
             )
 
+    def outing_has_assignments(self, outing_id: int) -> bool:
+        rows = self.outing_service.get_assignments(outing_id)
+        return bool(rows)
+
     def edit_schedule(self):
         outing_id = self.selected_row_id(self.outings_table)
         if not outing_id:
-            QMessageBox.warning(self, "No selection", "Select an outing first.")
+            show_warning(self, "No selection", "Select an outing first.")
             return
 
         dlg = ScheduleEditorDialog(
@@ -749,7 +767,7 @@ class MainWindow(QMainWindow):
     def export_outputs(self):
         outing_id = self.selected_row_id(self.outings_table)
         if not outing_id:
-            QMessageBox.warning(self, "No selection", "Select an outing first.")
+            show_warning(self, "No selection", "Select an outing first.")
             return
 
         outing = self.outing_service.get_outing(outing_id)
@@ -757,7 +775,7 @@ class MainWindow(QMainWindow):
         assignments = self.outing_service.get_assignments(outing_id)
 
         if not assignments:
-            QMessageBox.warning(
+            show_warning(
                 self,
                 "No schedule",
                 "Generate or edit a schedule first.",
@@ -892,12 +910,12 @@ class MainWindow(QMainWindow):
     def manage_rsvp(self):
         outing_id = self.selected_row_id(self.outings_table)
         if not outing_id:
-            QMessageBox.warning(self, "No selection", "Select an outing first.")
+            show_warning(self, "No selection", "Select an outing first.")
             return
 
         outing = self.outing_service.get_outing(outing_id)
         if not outing:
-            QMessageBox.warning(
+            show_warning(
                 self,
                 "Outing Not Found",
                 "Could not load the selected outing.",
@@ -923,12 +941,12 @@ class MainWindow(QMainWindow):
     def open_email_draft_dialog(self):
         outing_id = self.selected_row_id(self.outings_table)
         if not outing_id:
-            QMessageBox.warning(self, "No Selection", "Select an outing first.")
+            show_warning(self, "No Selection", "Select an outing first.")
             return
 
         outing = self.outing_service.get_outing(outing_id)
         if not outing:
-            QMessageBox.warning(
+            show_warning(
                 self, "Outing Not Found", "Could not load the selected outing."
             )
             return
