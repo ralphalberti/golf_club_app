@@ -9,6 +9,7 @@ from PyQt5.QtWidgets import (
 )
 
 from services.settings_service import SettingsService
+from ui.shared.messages import show_error, show_info, show_warning
 
 
 class SettingsDialog(QDialog):
@@ -84,7 +85,7 @@ class SettingsDialog(QDialog):
             self.accept()
 
         except Exception as exc:
-            QMessageBox.warning(
+            show_warning(
                 self,
                 "Save Failed",
                 f"Could not save settings.\n\n{exc}",
