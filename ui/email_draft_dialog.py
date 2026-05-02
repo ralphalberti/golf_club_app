@@ -10,6 +10,7 @@ from PyQt5.QtWidgets import (
     QTextEdit,
     QVBoxLayout,
 )
+from ui.shared.messages import show_error, show_info, show_warning
 
 
 class EmailDraftDialog(QDialog):
@@ -184,7 +185,7 @@ class EmailDraftDialog(QDialog):
 
         to_emails = [part.strip() for part in raw_emails.split(",") if part.strip()]
         if not to_emails:
-            QMessageBox.warning(
+            show_warning(
                 self,
                 "No Recipients",
                 "Enter at least one test email address.",
