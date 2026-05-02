@@ -12,6 +12,7 @@ from PyQt5.QtWidgets import (
     QMessageBox,
 )
 from PyQt5.QtCore import QDate
+from ui.shared.messages import show_error, show_info, show_warning
 
 
 class MemberFormDialog(QDialog):
@@ -80,7 +81,7 @@ class MemberFormDialog(QDialog):
         phone = self.phone.text().strip()
 
         if not first_name or not last_name or not email or not phone:
-            QMessageBox.warning(
+            show_warning(
                 self,
                 "Missing Required Fields",
                 "First name, last name, email, and phone are required.",
@@ -139,7 +140,7 @@ class GuestFormDialog(QDialog):
         last_name = self.last_name.text().strip()
 
         if not first_name or not last_name:
-            QMessageBox.warning(
+            show_warning(
                 self,
                 "Missing Required Fields",
                 "First name and last name are required.",
