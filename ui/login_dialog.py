@@ -1,6 +1,14 @@
 from PyQt5.QtWidgets import (
-    QDialog, QFormLayout, QLineEdit, QPushButton, QVBoxLayout, QLabel, QMessageBox
+    QDialog,
+    QFormLayout,
+    QLineEdit,
+    QPushButton,
+    QVBoxLayout,
+    QLabel,
+    QMessageBox,
 )
+from ui.shared.messages import show_error, show_info, show_warning
+
 
 class LoginDialog(QDialog):
     def __init__(self, auth_service):
@@ -29,9 +37,11 @@ class LoginDialog(QDialog):
         self.setLayout(layout)
 
     def handle_login(self):
-        user = self.auth_service.authenticate(self.username_edit.text().strip(), self.password_edit.text())
+        user = self.auth_service.authenticate(
+            self.username_edit.text().strip(), self.password_edit.text()
+        )
         if not user:
-            QMessageBox.warning(self, "Login failed", "Invalid credentials.")
+            show_warning(self, "Login failed", "Invalid credentials.")
             return
         self.authenticated_user = user
         self.accept()
