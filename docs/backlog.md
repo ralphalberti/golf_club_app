@@ -379,3 +379,11 @@
 - [ ] Consider separate actions:
   - Generate Schedule
   - Regenerate Schedule
+
+  ---
+
+### Remove Deprecated Dialogs
+
+- [ ] Remove OutingAssignmentDialog
+- [ ] Remove related references and imports
+- [ ] Confirm no remaining dependencies before deletion
