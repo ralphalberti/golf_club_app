@@ -15,6 +15,7 @@ from PyQt5.QtWidgets import (
     QLineEdit,
     QMessageBox,
 )
+from ui.shared.messages import show_error, show_info, show_warning
 
 DataRole = Qt.ItemDataRole
 SelectionMode = QAbstractItemView.SelectionMode
@@ -195,13 +196,13 @@ class OutingAssignmentDialog(QDialog):
 
             if capacity is not None and current_selected >= capacity:
                 if added_count == 0:
-                    QMessageBox.warning(
+                    show_warning(
                         self,
                         "Capacity Reached",
                         f"You cannot select more than {capacity} players for this outing.",
                     )
                 else:
-                    QMessageBox.information(
+                    show_info(
                         self,
                         "Capacity Reached",
                         f"Only {added_count} player(s) were added because the outing capacity is {capacity}.",
@@ -237,7 +238,7 @@ class OutingAssignmentDialog(QDialog):
         member_id = int(item.data(DataRole.UserRole))
 
         if capacity is not None and current_selected >= capacity:
-            QMessageBox.warning(
+            show_warning(
                 self,
                 "Capacity Reached",
                 f"You cannot select more than {capacity} players for this outing.",
@@ -283,7 +284,7 @@ class OutingAssignmentDialog(QDialog):
             and current_selected >= capacity
             and added_count < self.available_list.count()
         ):
-            QMessageBox.information(
+            show_info(
                 self,
                 "Capacity Reached",
                 f"Only {added_count} visible player(s) were added because the outing capacity is {capacity}.",
@@ -309,14 +310,12 @@ class OutingAssignmentDialog(QDialog):
     def accept_with_validation(self):
         selected_ids = self.selected_member_ids()
         if not selected_ids:
-            QMessageBox.warning(
-                self, "No Players Selected", "Select at least one player."
-            )
+            show_warning(self, "No Players Selected", "Select at least one player.")
             return
 
         capacity = self._get_capacity()
         if capacity is not None and len(selected_ids) > capacity:
-            QMessageBox.warning(
+            show_warning(
                 self,
                 "Too Many Players",
                 f"You selected {len(selected_ids)} players, but the outing capacity is {capacity}.",

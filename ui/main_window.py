@@ -536,13 +536,13 @@ class MainWindow(QMainWindow):
             error_text = str(exc)
 
             if "FOREIGN KEY constraint failed" in error_text:
-                QMessageBox.critical(
+                show_error(
                     self,
                     "Delete Failed",
                     "Member cannot be deleted while participating in a currently scheduled outing.",
                 )
             else:
-                QMessageBox.critical(
+                show_error(
                     self,
                     "Delete Failed",
                     f"Could not delete member.\n\n{exc}",
@@ -589,7 +589,7 @@ class MainWindow(QMainWindow):
             self.load_courses()
             show_info(self, "Course Deleted", "Course deleted successfully.")
         except Exception as exc:
-            QMessageBox.critical(
+            show_error(
                 self,
                 "Delete Failed",
                 f"Could not delete course.\n\n{exc}",
@@ -653,7 +653,7 @@ class MainWindow(QMainWindow):
                 "The outing was deleted successfully.",
             )
         except Exception as exc:
-            QMessageBox.critical(
+            show_error(
                 self,
                 "Delete Failed",
                 f"Could not delete outing.\n\n{exc}",
@@ -821,7 +821,7 @@ class MainWindow(QMainWindow):
             self.load_members()
 
         except Exception as exc:
-            QMessageBox.critical(self, "Import Failed", str(exc))
+            show_error(self, "Import Failed", str(exc))
 
     def show_about_dialog(self):
         QMessageBox.about(
