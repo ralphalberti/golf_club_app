@@ -414,7 +414,7 @@ class OutingRSVPDialog(QDialog):
                 self.outing_id,
                 self.stage_combo.currentData(),
             )
-            QMessageBox.information(self, "Stage Saved", "Workflow stage updated.")
+            show_info(self, "Stage Saved", "Workflow stage updated.")
         except Exception as exc:
             show_warning(
                 self,
@@ -1302,7 +1302,7 @@ class OutingRSVPDialog(QDialog):
                 ]
                 message += "\n\nFailed details:\n" + "\n".join(failed_lines)
 
-            QMessageBox.information(
+            show_info(
                 self,
                 "Selected Email Send Complete",
                 message,
@@ -1562,7 +1562,7 @@ class OutingRSVPDialog(QDialog):
             ]
             message += "\n\nFailed details:\n" + "\n".join(failed_lines)
 
-        QMessageBox.information(
+        show_info(
             self,
             "Email Send Complete",
             message,
