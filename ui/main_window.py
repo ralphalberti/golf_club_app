@@ -531,9 +531,7 @@ class MainWindow(QMainWindow):
         try:
             self.member_service.delete_member(member_id)
             self.load_members()
-            QMessageBox.information(
-                self, "Member Deleted", "Member deleted successfully."
-            )
+            show_info(self, "Member Deleted", "Member deleted successfully.")
         except Exception as exc:
             error_text = str(exc)
 
@@ -589,9 +587,7 @@ class MainWindow(QMainWindow):
         try:
             self.course_service.delete_course(course_id)
             self.load_courses()
-            QMessageBox.information(
-                self, "Course Deleted", "Course deleted successfully."
-            )
+            show_info(self, "Course Deleted", "Course deleted successfully.")
         except Exception as exc:
             QMessageBox.critical(
                 self,
@@ -651,7 +647,7 @@ class MainWindow(QMainWindow):
             self.outing_service.delete_outing(outing_id)
             self.load_outings()
             self.refresh_assignments()
-            QMessageBox.information(
+            show_info(
                 self,
                 "Outing Deleted",
                 "The outing was deleted successfully.",
@@ -715,7 +711,7 @@ class MainWindow(QMainWindow):
             self._render_schedule(schedule)
             self.assignments_table.setFocus()
 
-            QMessageBox.information(
+            show_info(
                 self,
                 "Schedule generated",
                 "The outing schedule has been generated.",
@@ -728,7 +724,7 @@ class MainWindow(QMainWindow):
             # self._render_schedule(schedule)
             # self.assignments_table.setFocus()
             #
-            # QMessageBox.information(
+            # show_info(
             #     self,
             #     "Schedule generated",
             #     f"The outing schedule has been generated.\n\n"
@@ -788,7 +784,7 @@ class MainWindow(QMainWindow):
             assignments,
         )
 
-        QMessageBox.information(
+        show_info(
             self,
             "Export complete",
             f"Saved:\n{pdf_path}\n{csv_path}",
@@ -821,7 +817,7 @@ class MainWindow(QMainWindow):
                 if len(result["errors"]) > 10:
                     message += "\n..."
 
-            QMessageBox.information(self, "Member Import", message)
+            show_info(self, "Member Import", message)
             self.load_members()
 
         except Exception as exc:
