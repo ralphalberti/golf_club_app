@@ -440,7 +440,7 @@ class ScheduleEditorDialog(QDialog):
             self.load_assignments_tree()
 
             if new_stage == "schedule_revised":
-                QMessageBox.information(
+                show_info(
                     self,
                     "Workflow Updated",
                     "The schedule changed after pairings were sent.\n\n"
@@ -448,7 +448,7 @@ class ScheduleEditorDialog(QDialog):
                 )
 
         except Exception as exc:
-            QMessageBox.critical(
+            show_error(
                 self,
                 "Save Failed",
                 f"Could not save the updated schedule.\n\n{exc}",
@@ -559,7 +559,7 @@ class ScheduleEditorDialog(QDialog):
             return
 
         if skipped_members:
-            QMessageBox.information(
+            show_info(
                 self,
                 "Some Players Not Added",
                 "Some selected players could not be added because the tee time "
