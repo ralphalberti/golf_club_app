@@ -123,7 +123,7 @@ class EmailDraftDialog(QDialog):
             self.current_body_html = draft["body_html"]
 
         except Exception as exc:
-            QMessageBox.critical(self, "Error", str(exc))
+            show_error(self, "Error", str(exc))
 
     def regenerate(self):
         try:
@@ -143,7 +143,7 @@ class EmailDraftDialog(QDialog):
             self.current_body_html = draft["body_html"]
 
         except Exception as exc:
-            QMessageBox.critical(self, "Error", str(exc))
+            show_error(self, "Error", str(exc))
 
     def save_draft(self):
         try:
@@ -156,10 +156,10 @@ class EmailDraftDialog(QDialog):
                 body_html=self.current_body_html,
             )
 
-            QMessageBox.information(self, "Saved", "Draft saved successfully")
+            show_info(self, "Saved", "Draft saved successfully")
 
         except Exception as exc:
-            QMessageBox.critical(self, "Error", str(exc))
+            show_error(self, "Error", str(exc))
 
     def _save_draft_silently(self):
         self.draft_service.save_draft(
@@ -230,11 +230,11 @@ class EmailDraftDialog(QDialog):
                     "draft_service.send_test_draft(...)."
                 )
 
-            QMessageBox.information(
+            show_info(
                 self,
                 "Test Email Sent",
                 f"Sent {sent_count} test email(s) successfully.",
             )
 
         except Exception as exc:
-            QMessageBox.critical(self, "Test Send Failed", str(exc))
+            show_error(self, "Test Send Failed", str(exc))
