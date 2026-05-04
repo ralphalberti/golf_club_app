@@ -662,7 +662,9 @@ class MainWindow(QMainWindow):
     def generate_schedule(self):
         outing_id = self.selected_row_id(self.outings_table)
         if not outing_id:
-            show_warning(self, "No outing selected", "Select an outing first.")
+            show_warning(
+                self, "No Outing Selected", "Please select an outing before continuing."
+            )
             return
 
         if self.outing_has_assignments(outing_id):
@@ -714,7 +716,7 @@ class MainWindow(QMainWindow):
             show_info(
                 self,
                 "Schedule generated",
-                "The outing schedule has been generated.",
+                "The outing schedule was generated successfully.",
             )
             # result = self.scheduling_service.generate_schedule(outing_id)
             # schedule = self.scheduling_service.get_schedule(outing_id)
@@ -735,8 +737,8 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             show_warning(
                 self,
-                "Generate Schedule Failed",
-                f"Could not generate the schedule.\n\n{exc}",
+                "Schedule Not Generated",
+                f"The schedule could not be generated. Check that the outing has tee times and confirmed players, then try again.\n\n{exc}",
             )
 
     def outing_has_assignments(self, outing_id: int) -> bool:
