@@ -226,10 +226,10 @@ class ScheduleEditorDialog(QDialog):
         if parent is None or not hasattr(parent, "rsvp_service"):
             return
 
-        schedulable_member_ids = set(
-            parent.rsvp_service.get_schedulable_member_ids(self.outing_id)
+        waitlist_member_ids = parent.rsvp_service.get_schedulable_member_ids(
+            self.outing_id
         )
-        if not schedulable_member_ids:
+        if not waitlist_member_ids:
             return
 
         assigned_member_ids = set()
@@ -238,24 +238,30 @@ class ScheduleEditorDialog(QDialog):
             assigned_member_ids.add(int(row["member_id"]))
 
         members = self.outing_service.get_unassigned_members_for_outing(self.outing_id)
+        members_by_id = {int(row["id"]): row for row in members}
 
-        for row in members:
-            member_id = int(row["id"])
+        waitlist_position = 0
 
-            if member_id not in schedulable_member_ids:
-                continue
-
+        for member_id in waitlist_member_ids:
             if member_id in assigned_member_ids:
                 continue
 
+            row = members_by_id.get(member_id)
+            if row is None:
+                continue
+
+            waitlist_position += 1
+
             guest_count = self._guest_count_for_member(member_id)
-            text = f"{row['first_name']} {row['last_name']}"
+            text = f"#{waitlist_position} - {row['first_name']} {row['last_name']}"
+
             if guest_count > 0:
                 text += f" (+{guest_count} guest{'s' if guest_count != 1 else ''})"
 
             item = QListWidgetItem(text)
             item.setData(DataRole.UserRole, member_id)
             item.setData(DataRole.UserRole + 1, row["skill_tier"])
+            item.setData(DataRole.UserRole + 2, waitlist_position)
 
             self._apply_tier_color_to_list_item(item, row["skill_tier"])
             self.available_members_list.addItem(item)
