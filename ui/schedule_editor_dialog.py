@@ -450,8 +450,8 @@ class ScheduleEditorDialog(QDialog):
         except Exception as exc:
             show_error(
                 self,
-                "Save Failed",
-                f"Could not save the updated schedule.\n\n{exc}",
+                "Schedule Not Saved",
+                f"The schedule changes could not be saved. Please review the schedule and try again.\n\n{exc}",
             )
             self.load_assignments_tree()
 
@@ -622,7 +622,7 @@ class ScheduleEditorDialog(QDialog):
             show_warning(
                 self,
                 "No Player Selected",
-                "Select one or more assigned sponsor/member rows to remove.",
+                "Please select one or more scheduled players to remove.",
             )
             return
 
@@ -634,7 +634,7 @@ class ScheduleEditorDialog(QDialog):
             show_warning(
                 self,
                 "Mixed Tee Times Selected",
-                "Select players from only one tee time at a time.",
+                "Please select players from one tee time at a time.",
             )
             return
 
