@@ -59,10 +59,10 @@ class MemberFormDialog(QDialog):
         self.notes = QTextEdit(member["notes"] if member else "")
 
         form = QFormLayout(self)
-        form.addRow("First name", self.first_name)
-        form.addRow("Last name", self.last_name)
-        form.addRow("Email", self.email)
-        form.addRow("Phone", self.phone)
+        form.addRow("First name *", self.first_name)
+        form.addRow("Last name *", self.last_name)
+        form.addRow("Email *", self.email)
+        form.addRow("Phone *", self.phone)
         form.addRow("Handicap", self.handicap)
         form.addRow("Skill Tier", self.skill_tier)
         form.addRow("Joined date", self.joined_date)
@@ -84,7 +84,7 @@ class MemberFormDialog(QDialog):
             show_warning(
                 self,
                 "Missing Required Fields",
-                "First name, last name, email, and phone are required.",
+                "Please complete all required fields before saving. First name, last name, email, and phone are required.",
             )
             return
 
