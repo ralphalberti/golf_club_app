@@ -605,8 +605,8 @@ class OutingRSVPDialog(QDialog):
         except Exception as exc:
             show_warning(
                 self,
-                "Invite Failed",
-                f"Could not invite member.\n\n{exc}",
+                "Member Not Invited",
+                f"The member could not be invited. Please try again.\n\n{exc}",
             )
 
     def _selected_member_rsvp_ids(self):
@@ -863,8 +863,8 @@ class OutingRSVPDialog(QDialog):
         except Exception as exc:
             show_warning(
                 self,
-                "Update Failed",
-                f"Could not update member RSVP status.\n\n{exc}",
+                "RSVP Not Updated",
+                f"The member’s RSVP status could not be updated. Please try again.\n\n{exc}",
             )
 
     def remove_selected_member_rsvps(self):
