@@ -1119,9 +1119,9 @@ class OutingRSVPDialog(QDialog):
 
             show_warning(
                 self,
-                "Schedule Needs Revision",
-                "This guest change makes the current schedule invalid.\n\n"
-                "Please regenerate or revise the schedule.\n\n"
+                "Schedule Needs Review",
+                "This change may affect the current schedule.\n\n"
+                "Please review the schedule before sending updated pairings.\n\n"
                 f"Details: {exc}",
             )
 

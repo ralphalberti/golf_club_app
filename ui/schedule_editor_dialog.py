@@ -410,7 +410,7 @@ class ScheduleEditorDialog(QDialog):
 
         return True
 
-    def persist_tree_structure(self):
+    def persist_tree_structure(self, show_workflow_message: bool = True):
         grouped_member_ids = []
         previously_assigned_member_ids = self._assigned_member_ids_for_outing()
 
@@ -445,7 +445,7 @@ class ScheduleEditorDialog(QDialog):
             self.load_available_members()
             self.load_assignments_tree()
 
-            if new_stage == "schedule_revised":
+            if show_workflow_message and new_stage == "schedule_revised":
                 show_info(
                     self,
                     "Workflow Updated",
@@ -668,7 +668,37 @@ class ScheduleEditorDialog(QDialog):
             self.load_assignments_tree()
             return
 
-        self.persist_tree_structure()
+        self.persist_tree_structure(show_workflow_message=False)
+        self.select_group_by_tee_time_id(selected_tee_time_id)
+
+        confirm = QMessageBox.question(
+            self,
+            "Promote Waitlist Player",
+            "Do you want to add the next waitlisted player to this tee time?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.Yes,
+        )
+
+        if confirm == QMessageBox.Yes:
+            fresh_group_item = self.get_selected_group_item()
+
+            if fresh_group_item is None:
+                show_warning(
+                    self,
+                    "Tee Time Not Selected",
+                    "The tee time could not be selected for waitlist promotion.",
+                )
+                return
+
+            promoted = self._promote_next_waitlist_player(fresh_group_item)
+
+            if not promoted:
+                show_info(
+                    self,
+                    "No Promotion",
+                    "No waitlisted player could be added to this tee time.",
+                )
+
         self.select_group_by_tee_time_id(selected_tee_time_id)
 
     def _mark_member_removed_from_schedule(self, member_id: int) -> None:
@@ -722,6 +752,43 @@ class ScheduleEditorDialog(QDialog):
             if 0 <= idx < group_item.childCount():
                 group_item.removeChild(group_item.child(idx))
 
+    def _promote_next_waitlist_player(self, group_item):
+        parent = self.parent()
+        if parent is None or not hasattr(parent, "rsvp_service"):
+            return False
+
+        waitlist_member_ids = parent.rsvp_service.get_schedulable_member_ids(
+            self.outing_id
+        )
+
+        assigned_member_ids = {
+            int(row["member_id"])
+            for row in self.outing_service.get_assignments(self.outing_id)
+        }
+
+        # Build lookup from available list
+        member_items = {}
+        for i in range(self.available_members_list.count()):
+            item = self.available_members_list.item(i)
+            member_items[int(item.data(DataRole.UserRole))] = item
+
+        for member_id in waitlist_member_ids:
+            if member_id in assigned_member_ids:
+                continue
+
+            item = member_items.get(member_id)
+            if not item:
+                continue
+
+            self.assignments_tree.setCurrentItem(group_item)
+            self.add_double_clicked_member(item, show_workflow_message=False)
+            return True
+
+            # If #1 doesn't fit, stop (do NOT skip)
+            break
+
+        return False
+
     def select_group_by_tee_time_id(self, tee_time_id: int):
         for i in range(self.assignments_tree.topLevelItemCount()):
             group_item = self.assignments_tree.topLevelItem(i)
@@ -731,7 +798,7 @@ class ScheduleEditorDialog(QDialog):
                 self.assignments_tree.scrollToItem(group_item)
                 return
 
-    def add_double_clicked_member(self, item):
+    def add_double_clicked_member(self, item, show_workflow_message: bool = True):
         if not item:
             return
 
@@ -799,7 +866,7 @@ class ScheduleEditorDialog(QDialog):
             self.load_assignments_tree()
             return
 
-        self.persist_tree_structure()
+        self.persist_tree_structure(show_workflow_message=show_workflow_message)
         self.select_group_by_tee_time_id(selected_tee_time_id)
 
     def handle_assignment_double_click(self, item, column):
