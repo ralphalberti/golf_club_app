@@ -550,3 +550,11 @@ Separation of responsibilities:
 - Distribution list controls (seasonal exclusions)
 - Email delivery reliability tracking
 - Unified people model (members / guests / contacts)
+
+---
+
+### Rename Schedule Validation Warning Helper
+
+- [ ] Rename `_warn_if_schedule_invalid_after_guest_change`
+- [ ] Use a more general name such as `_warn_if_schedule_needs_review`
+- [ ] Ensure RSVP, guest, and schedule changes use context-appropriate messages
