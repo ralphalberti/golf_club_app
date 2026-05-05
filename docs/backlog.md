@@ -387,3 +387,166 @@
 - [ ] Remove OutingAssignmentDialog
 - [ ] Remove related references and imports
 - [ ] Confirm no remaining dependencies before deletion
+
+---
+
+### Form Required Fields and Validation UX
+
+- [ ] Clearly mark required fields with an asterisk (`*`)
+- [ ] Add helper text to forms:
+  - `* indicates required fields`
+- [ ] Review Add/Edit forms for required fields:
+  - Members
+  - Guests
+  - Courses
+  - Outings
+  - Course Contacts
+- [ ] Require minimum fields:
+  - Course: at least course name
+  - Outing: at least course, outing date, tee time count
+- [ ] Improve validation messages:
+  - explain which fields are missing
+  - focus first missing/invalid field where possible
+- [ ] Consider inline validation/highlighting for missing required fields
+
+---
+
+---
+
+## Recent System Updates (Post-v2 Refinement)
+
+### RSVP State Model (Updated)
+
+RSVP statuses have been simplified:
+
+- selected (pre-invite staging)
+- invited
+- yes
+
+Notes:
+
+- "maybe" and "no" are not used
+- Members are either playing ("yes") or not participating
+- Admin removals revert status from "yes" → "invited" with audit note
+
+---
+
+### Schedule Removal Behavior (NEW)
+
+When an admin removes a player from the schedule:
+
+- Player is removed from tee_time_assignments
+- RSVP status is updated:
+  - from "yes" → "invited"
+- A note is recorded:
+  - "Removed from schedule by admin"
+
+Important:
+
+- Removed players MUST NOT be placed on the waitlist
+- Waitlist is derived only from:
+  - RSVP = "yes"
+  - not currently scheduled
+
+---
+
+### Waitlist Definition (Clarified)
+
+Waitlist is not a stored state — it is derived:
+
+A member is considered waitlisted if:
+
+- RSVP status = "yes"
+- not assigned to a tee time
+- not removed/cancelled
+
+Ordering:
+
+- Based on RSVP `responded_at` timestamp (ascending)
+
+---
+
+### Schedule Regeneration Safety (NEW)
+
+If a schedule already exists:
+
+- System prompts before regenerating
+- Regeneration will overwrite all existing assignments
+
+Purpose:
+
+- Prevent accidental loss of manual edits
+
+---
+
+### Messaging System (NEW)
+
+All UI messaging is now centralized:
+
+- show_warning()
+- show_info()
+- show_error()
+
+Benefits:
+
+- Consistent messaging across application
+- Easier future improvements (logging, formatting, localization)
+
+---
+
+### Message Design Standard
+
+All messages follow:
+
+- Title: short, descriptive
+- Body:
+  - what happened
+  - what the admin should do next
+
+Example:
+
+Title: Schedule Not Generated  
+Body: The schedule could not be generated. Check that the outing has tee times and confirmed players, then try again.
+
+---
+
+### Form UX Improvements (NEW)
+
+- Required fields are marked with `*`
+- Forms guide users before validation errors occur
+
+Future:
+
+- Inline validation
+- Highlight missing fields
+- Focus first invalid field
+
+---
+
+### UI Workflow Clarification
+
+Separation of responsibilities:
+
+- Manage RSVP dialog:
+  - invitations
+  - RSVP tracking
+  - communication workflow
+
+- Schedule Editor:
+  - tee time assignments
+  - reshuffling
+  - manual adjustments
+
+- Main Window:
+  - schedule generation
+  - high-level workflow control
+
+---
+
+### Known Gaps (Active Backlog)
+
+- Cancellation via email token
+- Waitlist promotion UI
+- Distribution list controls (seasonal exclusions)
+- Email delivery reliability tracking
+- Unified people model (members / guests / contacts)
