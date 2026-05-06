@@ -85,3 +85,9 @@ class OutingService:
 
     def get_tee_time_by_id(self, tee_time_id: int):
         return self.repo.get_tee_time_by_id(tee_time_id)
+
+    def remove_member_from_schedule(self, outing_id: int, member_id: int) -> None:
+        self.repo.remove_member_from_schedule(outing_id, member_id)
+
+    def auto_promote_waitlist(self, outing_id: int) -> None:
+        self.repo.auto_promote_waitlist(outing_id)

@@ -585,19 +585,6 @@ class RsvpService:
 
             return [int(row["member_id"]) for row in rows]
 
-    # def get_outing_workflow_stage(self, outing_id: int) -> str:
-    #     with self.db.get_conn() as conn:
-    #
-    #         row = conn.execute(
-    #             """
-    #             SELECT workflow_state
-    #             FROM outings
-    #             WHERE id = ?
-    #             """,
-    #             (outing_id,),
-    #         ).fetchone()
-    #
-    #         return row["workflow_state"] if row else "unknown"
     def get_outing_workflow_stage(self, outing_id: int) -> str:
         with self.db.get_conn() as conn:
             row = conn.execute(
@@ -824,6 +811,21 @@ class RsvpService:
                 WHERE id = ?
                 """,
                 (existing["id"],),
+            )
+
+    def record_cancel(self, outing_id: int, member_id: int) -> None:
+        with self.db.get_conn() as conn:
+            conn.execute(
+                """
+                UPDATE outing_rsvps
+                SET status = 'invited',
+                    note = 'Cancelled via email link',
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE outing_id = ?
+                  AND member_id = ?
+                  AND status = 'yes'
+                """,
+                (outing_id, member_id),
             )
 
 

@@ -23,6 +23,10 @@ class _RSVPRequestHandler(BaseHTTPRequestHandler):
             self._handle_rsvp_yes(parsed)
             return
 
+        if parsed.path == "/rsvp/cancel":
+            self._handle_rsvp_cancel(parsed)
+            return
+
         if parsed.path == "/claim-open-slot":
             self._handle_claim_open_slot(parsed)
             return
@@ -78,6 +82,71 @@ class _RSVPRequestHandler(BaseHTTPRequestHandler):
             <html>
               <body style="font-family: Arial, sans-serif; padding: 24px;">
                 <h1>RSVP Error</h1>
+                <p>{exc.__class__.__name__}: {str(exc)}</p>
+              </body>
+            </html>
+            """
+            self._send_html(400, html)
+
+    def _handle_rsvp_cancel(self, parsed):
+        params = parse_qs(parsed.query)
+        token = params.get("token", [""])[0].strip()
+
+        if not token:
+            self._send_html(
+                400,
+                "<html><body><h1>Missing token</h1></body></html>",
+            )
+            return
+
+        try:
+            assert self.token_service is not None
+            assert self.rsvp_service is not None
+            assert self.outing_service is not None
+            assert self.member_repo is not None
+
+            outing_id, member_id = self.token_service.decode_token(token)
+
+            outing = self.outing_service.get_outing(outing_id)
+            member = self.member_repo.get(member_id)
+
+            if not outing:
+                raise ValueError("Outing not found.")
+            if not member:
+                raise ValueError("Member not found.")
+
+            # Remove from schedule if assigned
+            if self.outing_service.is_member_assigned_for_outing(outing_id, member_id):
+                self.outing_service.remove_member_from_schedule(outing_id, member_id)
+
+            # Auto-promote next waitlist player
+            print("Calling auto_promote_waitlist", outing_id)
+            self.outing_service.auto_promote_waitlist(outing_id)
+
+            # Update RSVP status
+            self.rsvp_service.record_cancel(outing_id, member_id)
+
+            member_name = f"{member['first_name']} {member['last_name']}".strip()
+            course_name = str(outing["course_name"] or "")
+            outing_date = str(outing["outing_date"] or "")
+
+            html = f"""
+            <html>
+              <body style="font-family: Arial, sans-serif; padding: 24px;">
+                <h1>Cancellation Recorded</h1>
+                <p>Thanks, {member_name}. You have been removed from the outing.</p>
+                <p><strong>Course:</strong> {course_name}</p>
+                <p><strong>Date:</strong> {outing_date}</p>
+              </body>
+            </html>
+            """
+            self._send_html(200, html)
+
+        except Exception as exc:
+            html = f"""
+            <html>
+              <body style="font-family: Arial, sans-serif; padding: 24px;">
+                <h1>Cancellation Error</h1>
                 <p>{exc.__class__.__name__}: {str(exc)}</p>
               </body>
             </html>

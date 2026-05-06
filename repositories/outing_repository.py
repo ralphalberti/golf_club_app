@@ -332,3 +332,68 @@ class OutingRepository(BaseRepository):
             ).fetchone()
 
         return int(row["count"])
+
+    def remove_member_from_schedule(self, outing_id: int, member_id: int) -> None:
+        with self.db.get_conn() as conn:
+            conn.execute(
+                """
+                DELETE FROM tee_time_assignments
+                WHERE member_id = ?
+                  AND tee_time_id IN (
+                      SELECT id FROM tee_times WHERE outing_id = ?
+                  )
+                """,
+                (member_id, outing_id),
+            )
+
+    def auto_promote_waitlist(self, outing_id: int) -> None:
+        with self.db.get_conn() as conn:
+            # 1. Get next waitlist member
+            row = conn.execute(
+                """
+                SELECT member_id
+                FROM outing_rsvps
+                WHERE outing_id = ?
+                  AND status = 'yes'
+                  AND member_id NOT IN (
+                      SELECT tta.member_id
+                      FROM tee_time_assignments tta
+                      JOIN tee_times tt ON tt.id = tta.tee_time_id
+                      WHERE tt.outing_id = ?
+                  )
+                ORDER BY responded_at ASC
+                LIMIT 1
+                """,
+                (outing_id, outing_id),
+            ).fetchone()
+
+            if not row:
+                return
+
+            member_id = int(row["member_id"])
+
+            # 2. Find tee time with available space
+            tee_times = conn.execute(
+                """
+                SELECT tt.id, COUNT(tta.id) as count, tt.max_players
+                FROM tee_times tt
+                LEFT JOIN tee_time_assignments tta ON tta.tee_time_id = tt.id
+                WHERE tt.outing_id = ?
+                GROUP BY tt.id
+                ORDER BY tt.position_index
+                """,
+                (outing_id,),
+            ).fetchall()
+
+            for tt in tee_times:
+                if tt["count"] < tt["max_players"]:
+                    conn.execute(
+                        """
+                        INSERT INTO tee_time_assignments
+                        (tee_time_id, member_id, player_order_in_group, status, locked, checked_in)
+                        VALUES (?, ?, ?, 'scheduled', 0, 0)
+                        """,
+                        # (tt["id"], member_id, tt["count"]),
+                        (tt["id"], member_id, int(tt["count"]) + 1),
+                    )
+                    return
