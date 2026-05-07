@@ -208,6 +208,28 @@ class OutingEmailSendService:
                         schedule_html=personalized_schedule_html,
                     )
 
+                # For testing purposes only
+                subject_text = f"[TEST: {member['last_name']}] {subject_text}"
+
+                test_header = (
+                    "[TEST MODE]\n"
+                    f"Generated for: {member['first_name']} {member['last_name']}\n"
+                    f"Original email: {member['email'] or ''}\n\n"
+                )
+
+                body_text = test_header + body_text
+
+                if body_html is not None:
+                    test_html_header = (
+                        "<div style='border:1px solid #ccc;padding:12px;margin-bottom:16px;'>"
+                        "<strong>TEST MODE</strong><br>"
+                        f"Generated for: {member['first_name']} {member['last_name']}<br>"
+                        f"Original email: {member['email'] or ''}"
+                        "</div>"
+                    )
+                    body_html = test_html_header + body_html
+                    # End test block
+
                 self.email_service.send_email(
                     outing_id=outing_id,
                     to_email=to_email,
