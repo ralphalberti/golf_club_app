@@ -292,3 +292,64 @@ Admin must always know:
 - Member suspensions
 - Scheduling eligibility
 - Outing snapshots
+
+---
+
+## Current Implementation Status
+
+### Completed Recently
+
+- RSVP email token flow works:
+  - member clicks RSVP link
+  - RSVP status becomes `yes`
+  - original `responded_at` timestamp is preserved on repeat clicks
+
+- Cancellation email endpoint exists:
+  - `/rsvp/cancel?token=...`
+  - validates token
+  - removes scheduled member from outing
+  - updates RSVP status from `yes` to `invited`
+  - records note: `Cancelled via email link`
+
+- Waitlist auto-promotion works:
+  - when cancellation creates an open slot
+  - next waitlisted player is promoted automatically
+  - waitlist is based on RSVP `responded_at` order
+
+- Schedule editor supports:
+  - manual player removal
+  - optional waitlist promotion
+  - reduced popup friction
+  - ordered waitlist display
+
+- Test email mode improved:
+  - member identity appears in email subject
+  - member identity appears in email body
+  - useful when all test emails route to admin/developer inbox
+
+### Next Planned Work
+
+1. Add cancellation links to pairings and revised pairings email templates
+2. Trigger existing cancellation endpoint from those links
+3. Refine auto-promotion logic:
+   - respect guests/scheduling units
+   - do not skip first waitlisted unit automatically
+   - leave slot open if first waitlisted unit does not fit
+4. Add audit logging:
+   - who cancelled
+   - when they cancelled
+   - cancellation source: email link / admin
+   - who was auto-promoted, if applicable
+
+### Important Design Decisions
+
+- RSVP statuses are intentionally simple:
+  - `selected`
+  - `invited`
+  - `yes`
+- `no` and `maybe` are not part of the desired workflow
+- Non-response means not playing
+- Waitlist is derived, not stored:
+  - RSVP status = `yes`
+  - member is not assigned to a tee time
+- Admin tools should guide waitlist order but not strictly prevent override
