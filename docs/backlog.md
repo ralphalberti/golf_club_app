@@ -558,3 +558,15 @@ Separation of responsibilities:
 - [ ] Rename `_warn_if_schedule_invalid_after_guest_change`
 - [ ] Use a more general name such as `_warn_if_schedule_needs_review`
 - [ ] Ensure RSVP, guest, and schedule changes use context-appropriate messages
+
+---
+
+### Email Test Mode Recipient Identification
+
+- [ ] In preview/test email mode, include clear recipient identity in each email body
+- [ ] Show:
+  - member name
+  - original member email
+  - token/action type
+- [ ] Make it easy for admins/developers to identify which token belongs to which member
+- [ ] Keep this metadata out of production emails unless explicitly enabled
