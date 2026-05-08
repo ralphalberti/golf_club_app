@@ -570,3 +570,18 @@ Separation of responsibilities:
   - token/action type
 - [ ] Make it easy for admins/developers to identify which token belongs to which member
 - [ ] Keep this metadata out of production emails unless explicitly enabled
+
+---
+
+## Guest RSVP Support
+
+Sponsors need a way to declare guests during RSVP.
+
+Recommended approach:
+
+- Update RSVP web page to show guest fields after sponsor clicks “Yes”
+- Allow sponsor to enter guest names before confirmation
+- Store guests in current schema using `guests` + `outing_guests`
+- Treat sponsor + guests as an atomic scheduling group later
+- Add admin visibility/editing for guest counts and names
+- Add validation: max guests per sponsor, configurable per outing
