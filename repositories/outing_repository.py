@@ -375,7 +375,7 @@ class OutingRepository(BaseRepository):
             # 2. Find tee time with available space
             tee_times = conn.execute(
                 """
-                SELECT tt.id, COUNT(tta.id) as count, tt.max_players
+                SELECT tt.id, COUNT(CASE WHEN tta.status = 'scheduled' THEN 1 END) as count, tt.max_players
                 FROM tee_times tt
                 LEFT JOIN tee_time_assignments tta ON tta.tee_time_id = tt.id
                 WHERE tt.outing_id = ?
@@ -389,11 +389,25 @@ class OutingRepository(BaseRepository):
                 if tt["count"] < tt["max_players"]:
                     conn.execute(
                         """
-                        INSERT INTO tee_time_assignments
-                        (tee_time_id, member_id, player_order_in_group, status, locked, checked_in)
+                        INSERT INTO tee_time_assignments (
+                            tee_time_id,
+                            member_id,
+                            player_order_in_group,
+                            status,
+                            locked,
+                            checked_in
+                        )
                         VALUES (?, ?, ?, 'scheduled', 0, 0)
                         """,
-                        # (tt["id"], member_id, tt["count"]),
                         (tt["id"], member_id, int(tt["count"]) + 1),
                     )
+                    # conn.execute(
+                    #     """
+                    #     INSERT INTO tee_time_assignments
+                    #     (tee_time_id, member_id, player_order_in_group, status, locked, checked_in)
+                    #     VALUES (?, ?, ?, 'scheduled', 0, 0)
+                    #     """,
+                    #     # (tt["id"], member_id, tt["count"]),
+                    #     (tt["id"], member_id, int(tt["count"]) + 1),
+                    # )
                     return

@@ -109,6 +109,7 @@ class EmailRenderService:
             "course_contact_name": "",
             "course_contact_email": "",
             "rsvp_link": "",
+            "cancel_link": "",
             "schedule_text": "",
             "schedule_html": "",
             "open_spots_text": "",

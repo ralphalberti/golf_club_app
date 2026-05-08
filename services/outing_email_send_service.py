@@ -1,4 +1,8 @@
+from __future__ import annotations
+
+from app.config import RSVP_SERVER_HOST, RSVP_SERVER_PORT
 from services.outing_workflow_service import OutingWorkflowService
+from services.rsvp_token_service import RSVPTokenService
 
 
 class OutingEmailSendService:
@@ -15,6 +19,41 @@ class OutingEmailSendService:
         self.course_repo = draft_service.course_repo
         self.outing_service = draft_service.outing_service
         self.workflow_service = OutingWorkflowService(draft_service.repo.db)
+        self.token_service = RSVPTokenService()
+
+    def _cancel_link(self, outing_id: int, member_id: int) -> str:
+        token = self.token_service.create_token(outing_id, member_id)
+        return f"http://{RSVP_SERVER_HOST}:{RSVP_SERVER_PORT}/rsvp/cancel?token={token}"
+
+    def _inject_cancel_link(
+        self,
+        *,
+        outing_id: int,
+        member_id: int,
+        body_text: str,
+        body_html: str | None,
+    ) -> tuple[str, str | None]:
+        cancel_link = self._cancel_link(outing_id, member_id)
+
+        if "{{cancel_link}}" in body_text:
+            body_text = body_text.replace("{{cancel_link}}", cancel_link)
+        else:
+            body_text = (
+                f"{body_text.rstrip()}\n\n" "Need to cancel?\n" f"{cancel_link}\n"
+            )
+
+        if body_html is not None:
+            if "{{cancel_link}}" in body_html:
+                body_html = body_html.replace("{{cancel_link}}", cancel_link)
+            else:
+                body_html = (
+                    f"{body_html}"
+                    "<hr>"
+                    "<p><strong>Need to cancel?</strong><br>"
+                    f'<a href="{cancel_link}">Cancel your spot</a></p>'
+                )
+
+        return body_text, body_html
 
     def send_test_email(
         self,
@@ -72,6 +111,12 @@ class OutingEmailSendService:
                 body_html = self.draft_service._build_pairings_html_from_body_text(
                     body_text=body_text,
                     schedule_html=personalized_schedule_html,
+                )
+                body_text, body_html = self._inject_cancel_link(
+                    outing_id=outing_id,
+                    member_id=member_id,
+                    body_text=body_text,
+                    body_html=body_html,
                 )
 
             sent_count = 0
@@ -159,7 +204,6 @@ class OutingEmailSendService:
         sent = 0
         skipped: list[dict] = []
         failed: list[dict] = []
-
         seen_member_ids: set[int] = set()
 
         for member_id in member_ids:
@@ -179,7 +223,6 @@ class OutingEmailSendService:
                 continue
 
             attempted += 1
-
             subject_text = str(draft["subject_text"])
             body_text = str(draft["body_text"])
             body_html = draft["body_html"]
@@ -207,8 +250,13 @@ class OutingEmailSendService:
                         body_text=body_text,
                         schedule_html=personalized_schedule_html,
                     )
+                    body_text, body_html = self._inject_cancel_link(
+                        outing_id=outing_id,
+                        member_id=member_id,
+                        body_text=body_text,
+                        body_html=body_html,
+                    )
 
-                # For testing purposes only
                 subject_text = f"[TEST: {member['last_name']}] {subject_text}"
 
                 test_header = (
@@ -216,7 +264,6 @@ class OutingEmailSendService:
                     f"Generated for: {member['first_name']} {member['last_name']}\n"
                     f"Original email: {member['email'] or ''}\n\n"
                 )
-
                 body_text = test_header + body_text
 
                 if body_html is not None:
@@ -228,7 +275,6 @@ class OutingEmailSendService:
                         "</div>"
                     )
                     body_html = test_html_header + body_html
-                    # End test block
 
                 self.email_service.send_email(
                     outing_id=outing_id,

@@ -115,6 +115,25 @@ class _RSVPRequestHandler(BaseHTTPRequestHandler):
             if not member:
                 raise ValueError("Member not found.")
 
+            # # Update RSVP status
+            # self.rsvp_service.record_cancel(outing_id, member_id)
+            #
+            # # Remove from schedule if assigned
+            # if self.outing_service.is_member_assigned_for_outing(outing_id, member_id):
+            #     self.outing_service.remove_member_from_schedule(outing_id, member_id)
+            #
+            # # Auto-promote next waitlist player
+            # print("Calling auto_promote_waitlist", outing_id)
+            # self.outing_service.auto_promote_waitlist(outing_id)
+
+            # Update RSVP status first
+            self.rsvp_service.set_member_rsvp_status(
+                outing_id,
+                member_id,
+                "invited",
+                "Cancelled via email link",
+            )
+
             # Remove from schedule if assigned
             if self.outing_service.is_member_assigned_for_outing(outing_id, member_id):
                 self.outing_service.remove_member_from_schedule(outing_id, member_id)
@@ -122,9 +141,6 @@ class _RSVPRequestHandler(BaseHTTPRequestHandler):
             # Auto-promote next waitlist player
             print("Calling auto_promote_waitlist", outing_id)
             self.outing_service.auto_promote_waitlist(outing_id)
-
-            # Update RSVP status
-            self.rsvp_service.record_cancel(outing_id, member_id)
 
             member_name = f"{member['first_name']} {member['last_name']}".strip()
             course_name = str(outing["course_name"] or "")
