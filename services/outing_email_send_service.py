@@ -3,6 +3,7 @@ from __future__ import annotations
 from app.config import RSVP_SERVER_HOST, RSVP_SERVER_PORT
 from services.outing_workflow_service import OutingWorkflowService
 from services.rsvp_token_service import RSVPTokenService
+import html
 
 
 class OutingEmailSendService:
@@ -55,6 +56,41 @@ class OutingEmailSendService:
 
         return body_text, body_html
 
+    def _inject_rsvp_link(
+        self,
+        *,
+        body_text: str,
+        body_html: str | None,
+        rsvp_link: str,
+    ) -> tuple[str, str | None]:
+        text_cta = "Want to play?\n" "Yes, I'd like to play\n" f"{rsvp_link}"
+
+        html_cta = (
+            "<p><strong>Want to play?</strong><br>"
+            f'<a href="{rsvp_link}">Yes, I&apos;d like to play</a></p>'
+        )
+
+        if "{{rsvp_link}}" in body_text:
+            body_text = body_text.replace("{{rsvp_link}}", text_cta)
+        elif rsvp_link in body_text:
+            body_text = body_text.replace(rsvp_link, text_cta)
+        else:
+            body_text = f"{body_text.rstrip()}\n\n{text_cta}\n"
+
+        if body_html:
+            if "{{rsvp_link}}" in body_html:
+                body_html = body_html.replace("{{rsvp_link}}", html_cta)
+            elif rsvp_link in body_html:
+                body_html = body_html.replace(rsvp_link, html_cta)
+            else:
+                body_html = f"{body_html.rstrip()}\n{html_cta}"
+
+        return body_text, body_html
+
+    def _plain_text_to_html(self, body_text: str) -> str:
+        escaped = html.escape(body_text)
+        return "<p>" + escaped.replace("\n\n", "</p><p>").replace("\n", "<br>") + "</p>"
+
     def send_test_email(
         self,
         *,
@@ -100,6 +136,22 @@ class OutingEmailSendService:
                         member_id=member_id,
                     )
                 )
+
+                if body_html is None:
+                    body_html = self._plain_text_to_html(body_text)
+
+                token = RSVPTokenService().create_token(outing_id, member_id)
+                rsvp_link = (
+                    f"http://{RSVP_SERVER_HOST}:{RSVP_SERVER_PORT}"
+                    f"/rsvp/yes?token={token}"
+                )
+
+                body_text, body_html = self._inject_rsvp_link(
+                    body_text=body_text,
+                    body_html=body_html,
+                    rsvp_link=rsvp_link,
+                )
+
             elif template_type in {"pairings", "revised_pairings"}:
                 personalized_schedule_html = (
                     self.draft_service._apply_member_pairings_html(
@@ -238,6 +290,22 @@ class OutingEmailSendService:
                             member_id=member_id,
                         )
                     )
+
+                    if body_html is None:
+                        body_html = self._plain_text_to_html(body_text)
+
+                    token = RSVPTokenService().create_token(outing_id, member_id)
+                    rsvp_link = (
+                        f"http://{RSVP_SERVER_HOST}:{RSVP_SERVER_PORT}"
+                        f"/rsvp/yes?token={token}"
+                    )
+
+                    body_text, body_html = self._inject_rsvp_link(
+                        body_text=body_text,
+                        body_html=body_html,
+                        rsvp_link=rsvp_link,
+                    )
+
                 elif template_type in {"pairings", "revised_pairings"}:
                     personalized_schedule_html = (
                         self.draft_service._apply_member_pairings_html(

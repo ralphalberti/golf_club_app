@@ -54,7 +54,12 @@ class _RSVPRequestHandler(BaseHTTPRequestHandler):
             assert self.member_repo is not None
 
             outing_id, member_id = self.token_service.decode_token(token)
-            self.rsvp_service.record_yes_if_first(outing_id, member_id)
+            self.rsvp_service.set_member_rsvp_status(
+                outing_id,
+                member_id,
+                "yes",
+                "RSVP yes via email link",
+            )
 
             outing = self.outing_service.get_outing(outing_id)
             member = self.member_repo.get(member_id)
