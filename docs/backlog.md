@@ -585,3 +585,18 @@ Recommended approach:
 - Treat sponsor + guests as an atomic scheduling group later
 - Add admin visibility/editing for guest counts and names
 - Add validation: max guests per sponsor, configurable per outing
+
+---
+
+## Auto-fill open slots after late RSVP YES
+
+When a member clicks an RSVP YES link after a schedule has already been generated:
+
+- If an open tee-time slot exists, automatically promote the earliest unassigned RSVP YES member.
+- Respect guest-aware capacity.
+- Prefer the earliest true open slot by tee-time order.
+- Do not create fivesomes.
+- If no valid slot exists, leave member on waitlist.
+- Show clear confirmation:
+  - "You have been added to the schedule"
+  - or "You are on the waitlist"

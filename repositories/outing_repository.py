@@ -348,6 +348,82 @@ class OutingRepository(BaseRepository):
 
     def auto_promote_waitlist(self, outing_id: int) -> None:
         with self.db.get_conn() as conn:
+            row = conn.execute(
+                """
+                SELECT member_id
+                FROM outing_rsvps
+                WHERE outing_id = ?
+                  AND status = 'yes'
+                  AND member_id NOT IN (
+                      SELECT tta.member_id
+                      FROM tee_time_assignments tta
+                      JOIN tee_times tt ON tt.id = tta.tee_time_id
+                      WHERE tt.outing_id = ?
+                  )
+                ORDER BY responded_at ASC
+                LIMIT 1
+                """,
+                (outing_id, outing_id),
+            ).fetchone()
+
+            if not row:
+                return
+
+            candidate_member_id = int(row["member_id"])
+            candidate_size = self._guest_aware_member_size(
+                conn,
+                outing_id,
+                candidate_member_id,
+            )
+
+            tee_times = conn.execute(
+                """
+                SELECT id, max_players
+                FROM tee_times
+                WHERE outing_id = ?
+                ORDER BY position_index
+                """,
+                (outing_id,),
+            ).fetchall()
+
+            for tee_time in tee_times:
+                tee_time_id = int(tee_time["id"])
+                max_players = int(tee_time["max_players"])
+
+                current_size = self._guest_aware_tee_time_size(
+                    conn,
+                    outing_id,
+                    tee_time_id,
+                )
+
+                if current_size + candidate_size > max_players:
+                    continue
+
+                member_count = self._tee_time_assignment_count(conn, tee_time_id)
+
+                conn.execute(
+                    """
+                    INSERT INTO tee_time_assignments (
+                        tee_time_id,
+                        member_id,
+                        player_order_in_group,
+                        status,
+                        locked,
+                        checked_in
+                    )
+                    VALUES (?, ?, ?, 'scheduled', 0, 0)
+                    """,
+                    (tee_time_id, candidate_member_id, member_count + 1),
+                )
+                return
+
+    def auto_promote_waitlist_to_tee_time(
+        self,
+        outing_id: int,
+        tee_time_id: int,
+    ) -> None:
+        with self.db.get_conn() as conn:
+
             # 1. Get next waitlist member
             row = conn.execute(
                 """
@@ -370,44 +446,158 @@ class OutingRepository(BaseRepository):
             if not row:
                 return
 
-            member_id = int(row["member_id"])
+            candidate_member_id = int(row["member_id"])
 
-            # 2. Find tee time with available space
-            tee_times = conn.execute(
+            # 2. Get max players for tee time
+            tee_time = conn.execute(
                 """
-                SELECT tt.id, COUNT(CASE WHEN tta.status = 'scheduled' THEN 1 END) as count, tt.max_players
-                FROM tee_times tt
-                LEFT JOIN tee_time_assignments tta ON tta.tee_time_id = tt.id
-                WHERE tt.outing_id = ?
-                GROUP BY tt.id
-                ORDER BY tt.position_index
+                SELECT max_players
+                FROM tee_times
+                WHERE id = ?
                 """,
-                (outing_id,),
+                (tee_time_id,),
+            ).fetchone()
+
+            if not tee_time:
+                return
+
+            max_players = int(tee_time["max_players"])
+
+            # 3. Count current players INCLUDING guests
+            rows = conn.execute(
+                """
+                SELECT m.id AS member_id
+                FROM tee_time_assignments tta
+                JOIN members m ON m.id = tta.member_id
+                WHERE tta.tee_time_id = ?
+                """,
+                (tee_time_id,),
             ).fetchall()
 
-            for tt in tee_times:
-                if tt["count"] < tt["max_players"]:
-                    conn.execute(
-                        """
-                        INSERT INTO tee_time_assignments (
-                            tee_time_id,
-                            member_id,
-                            player_order_in_group,
-                            status,
-                            locked,
-                            checked_in
-                        )
-                        VALUES (?, ?, ?, 'scheduled', 0, 0)
-                        """,
-                        (tt["id"], member_id, int(tt["count"]) + 1),
-                    )
-                    # conn.execute(
-                    #     """
-                    #     INSERT INTO tee_time_assignments
-                    #     (tee_time_id, member_id, player_order_in_group, status, locked, checked_in)
-                    #     VALUES (?, ?, ?, 'scheduled', 0, 0)
-                    #     """,
-                    #     # (tt["id"], member_id, tt["count"]),
-                    #     (tt["id"], member_id, int(tt["count"]) + 1),
-                    # )
-                    return
+            total_players = 0
+
+            for r in rows:
+                sponsor_id = int(r["member_id"])
+
+                # count sponsor
+                total_players += 1
+
+                # count sponsor guests
+                guest_count = conn.execute(
+                    """
+                    SELECT COUNT(*) AS count
+                    FROM outing_guests
+                    WHERE outing_id = ?
+                      AND sponsoring_member_id = ?
+                      AND status = 'yes'
+                    """,
+                    (outing_id, sponsor_id),
+                ).fetchone()["count"]
+
+                total_players += int(guest_count)
+
+            # 4. Count candidate size
+            candidate_guest_count = conn.execute(
+                """
+                SELECT COUNT(*) AS count
+                FROM outing_guests
+                WHERE outing_id = ?
+                  AND sponsoring_member_id = ?
+                  AND status = 'yes'
+                """,
+                (outing_id, candidate_member_id),
+            ).fetchone()["count"]
+
+            candidate_size = 1 + int(candidate_guest_count)
+
+            # 5. Check capacity
+            if total_players + candidate_size > max_players:
+                return  # cannot fit — do nothing
+
+            # 6. Insert into THIS tee time
+            conn.execute(
+                """
+                INSERT INTO tee_time_assignments (
+                    tee_time_id,
+                    member_id,
+                    player_order_in_group,
+                    status,
+                    locked,
+                    checked_in
+                )
+                VALUES (?, ?, ?, 'scheduled', 0, 0)
+                """,
+                (
+                    tee_time_id,
+                    candidate_member_id,
+                    len(rows) + 1,
+                ),
+            )
+
+    def _guest_aware_member_size(self, conn, outing_id: int, member_id: int) -> int:
+        row = conn.execute(
+            """
+            SELECT COUNT(*) AS count
+            FROM outing_guests
+            WHERE outing_id = ?
+              AND sponsoring_member_id = ?
+              AND status = 'yes'
+            """,
+            (outing_id, member_id),
+        ).fetchone()
+
+        return 1 + int(row["count"] or 0)
+
+    def _guest_aware_tee_time_size(self, conn, outing_id: int, tee_time_id: int) -> int:
+        rows = conn.execute(
+            """
+            SELECT member_id
+            FROM tee_time_assignments
+            WHERE tee_time_id = ?
+              AND status = 'scheduled'
+            """,
+            (tee_time_id,),
+        ).fetchall()
+
+        total = 0
+        for row in rows:
+            total += self._guest_aware_member_size(
+                conn,
+                outing_id,
+                int(row["member_id"]),
+            )
+
+        return total
+
+    def _tee_time_assignment_count(self, conn, tee_time_id: int) -> int:
+        row = conn.execute(
+            """
+            SELECT COUNT(*) AS count
+            FROM tee_time_assignments
+            WHERE tee_time_id = ?
+              AND status = 'scheduled'
+            """,
+            (tee_time_id,),
+        ).fetchone()
+
+        return int(row["count"] or 0)
+
+    def get_member_tee_time_id_for_outing(
+        self,
+        outing_id: int,
+        member_id: int,
+    ) -> int | None:
+        with self.db.get_conn() as conn:
+            row = conn.execute(
+                """
+                SELECT tta.tee_time_id
+                FROM tee_time_assignments tta
+                JOIN tee_times tt ON tt.id = tta.tee_time_id
+                WHERE tt.outing_id = ?
+                  AND tta.member_id = ?
+                LIMIT 1
+                """,
+                (outing_id, member_id),
+            ).fetchone()
+
+        return int(row["tee_time_id"]) if row else None

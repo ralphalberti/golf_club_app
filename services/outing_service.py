@@ -91,3 +91,17 @@ class OutingService:
 
     def auto_promote_waitlist(self, outing_id: int) -> None:
         self.repo.auto_promote_waitlist(outing_id)
+
+    def auto_promote_waitlist_to_tee_time(
+        self,
+        outing_id: int,
+        tee_time_id: int,
+    ) -> None:
+        self.repo.auto_promote_waitlist_to_tee_time(outing_id, tee_time_id)
+
+    def get_member_tee_time_id_for_outing(
+        self,
+        outing_id: int,
+        member_id: int,
+    ) -> int | None:
+        return self.repo.get_member_tee_time_id_for_outing(outing_id, member_id)
