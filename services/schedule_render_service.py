@@ -38,11 +38,17 @@ class ScheduleRenderService:
             last_name = str(row["last_name"] or "").strip()
             sponsor_name = f"{first_name} {last_name}".strip()
 
-            if tee_time and sponsor_name:
-                grouped[tee_time].append(sponsor_name)
+            guest_list = guests_by_sponsor.get(sponsor_id, [])
 
-            for guest_name in guests_by_sponsor.get(sponsor_id, []):
-                grouped[tee_time].append(guest_name)
+            if tee_time and sponsor_name:
+                if guest_list:
+                    display = f"{sponsor_name} (+{len(guest_list)}) — " + ", ".join(
+                        guest_list
+                    )
+                else:
+                    display = sponsor_name
+
+                grouped[tee_time].append(display)
 
         lines: list[str] = []
 
@@ -51,7 +57,19 @@ class ScheduleRenderService:
             max_players = int(tee["max_players"] or max_players_per_group)
 
             players = list(grouped.get(tee_time, []))
-            open_slots = max(0, max_players - len(players))
+
+            expanded_player_count = 0
+            for player in players:
+                if "(+" in player:
+                    try:
+                        guest_count_text = player.split("(+", 1)[1].split(")", 1)[0]
+                        expanded_player_count += 1 + int(guest_count_text)
+                    except Exception:
+                        expanded_player_count += 1
+                else:
+                    expanded_player_count += 1
+
+            open_slots = max(0, max_players - expanded_player_count)
             players.extend(["OPEN"] * open_slots)
 
             player_text = ", ".join(players)
@@ -90,11 +108,17 @@ class ScheduleRenderService:
             last_name = str(row["last_name"] or "").strip()
             sponsor_name = f"{first_name} {last_name}".strip()
 
-            if tee_time and sponsor_name:
-                grouped[tee_time].append(sponsor_name)
+            guest_list = guests_by_sponsor.get(sponsor_id, [])
 
-            for guest_name in guests_by_sponsor.get(sponsor_id, []):
-                grouped[tee_time].append(guest_name)
+            if tee_time and sponsor_name:
+                if guest_list:
+                    display = f"{sponsor_name} (+{len(guest_list)}) — " + ", ".join(
+                        guest_list
+                    )
+                else:
+                    display = sponsor_name
+
+                grouped[tee_time].append(display)
 
         html_parts: list[str] = []
         html_parts.append('<table style="border-collapse: collapse; width: 100%;">')
@@ -105,7 +129,19 @@ class ScheduleRenderService:
             max_players = int(tee["max_players"] or max_players_per_group)
 
             players = list(grouped.get(tee_time, []))
-            open_slots = max(0, max_players - len(players))
+
+            expanded_player_count = 0
+            for player in players:
+                if "(+" in player:
+                    try:
+                        guest_count_text = player.split("(+", 1)[1].split(")", 1)[0]
+                        expanded_player_count += 1 + int(guest_count_text)
+                    except Exception:
+                        expanded_player_count += 1
+                else:
+                    expanded_player_count += 1
+
+            open_slots = max(0, max_players - expanded_player_count)
             players.extend(["OPEN"] * open_slots)
 
             rendered_players: list[str] = []
@@ -163,11 +199,17 @@ class ScheduleRenderService:
             last_name = str(row["last_name"] or "").strip()
             sponsor_name = f"{first_name} {last_name}".strip()
 
-            if tee_time and sponsor_name:
-                grouped[tee_time].append(sponsor_name)
+            guest_list = guests_by_sponsor.get(sponsor_id, [])
 
-            for guest_name in guests_by_sponsor.get(sponsor_id, []):
-                grouped[tee_time].append(guest_name)
+            if tee_time and sponsor_name:
+                if guest_list:
+                    display = f"{sponsor_name} (+{len(guest_list)}) — " + ", ".join(
+                        guest_list
+                    )
+                else:
+                    display = sponsor_name
+
+                grouped[tee_time].append(display)
 
         html_parts: list[str] = []
         html_parts.append('<table style="border-collapse: collapse; width: 100%;">')
@@ -179,7 +221,19 @@ class ScheduleRenderService:
             max_players = int(tee["max_players"] or max_players_per_group)
 
             players = list(grouped.get(tee_time, []))
-            open_slots = max(0, max_players - len(players))
+
+            expanded_player_count = 0
+            for player in players:
+                if "(+" in player:
+                    try:
+                        guest_count_text = player.split("(+", 1)[1].split(")", 1)[0]
+                        expanded_player_count += 1 + int(guest_count_text)
+                    except Exception:
+                        expanded_player_count += 1
+                else:
+                    expanded_player_count += 1
+
+            open_slots = max(0, max_players - expanded_player_count)
 
             rendered_players: list[str] = list(players)
 

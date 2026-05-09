@@ -160,6 +160,25 @@ class OutingEmailSendService:
                         member_id=member_id,
                     )
                 )
+                tee_times = self.outing_service.get_tee_times(outing_id)
+                assignments = self.outing_service.get_assignments(outing_id)
+
+                fresh_schedule_text = (
+                    self.draft_service.schedule_render_service.render_text(
+                        outing_id=outing_id,
+                        tee_times=tee_times,
+                        assignments=assignments,
+                    )
+                )
+
+                body_lines = []
+                for line in body_text.splitlines():
+                    if not self.draft_service._is_schedule_line(line):
+                        body_lines.append(line)
+
+                body_text = "\n".join(body_lines).rstrip()
+                body_text = f"{body_text}\n\n{fresh_schedule_text}"
+
                 body_html = self.draft_service._build_pairings_html_from_body_text(
                     body_text=body_text,
                     schedule_html=personalized_schedule_html,
@@ -314,6 +333,26 @@ class OutingEmailSendService:
                             member_id=member_id,
                         )
                     )
+
+                    tee_times = self.outing_service.get_tee_times(outing_id)
+                    assignments = self.outing_service.get_assignments(outing_id)
+
+                    fresh_schedule_text = (
+                        self.draft_service.schedule_render_service.render_text(
+                            outing_id=outing_id,
+                            tee_times=tee_times,
+                            assignments=assignments,
+                        )
+                    )
+
+                    body_lines = []
+                    for line in body_text.splitlines():
+                        if not self.draft_service._is_schedule_line(line):
+                            body_lines.append(line)
+
+                    body_text = "\n".join(body_lines).rstrip()
+                    body_text = f"{body_text}\n\n{fresh_schedule_text}"
+
                     body_html = self.draft_service._build_pairings_html_from_body_text(
                         body_text=body_text,
                         schedule_html=personalized_schedule_html,
