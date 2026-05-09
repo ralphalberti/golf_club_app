@@ -7,6 +7,8 @@ from services.rsvp_token_service import RSVPTokenService
 from services.outing_service import OutingService
 from services.open_slot_token_service import OpenSlotTokenService
 from repositories.member_repository import MemberRepository
+from html import escape
+from repositories.guest_repository import GuestRepository
 
 
 class _RSVPRequestHandler(BaseHTTPRequestHandler):
@@ -29,6 +31,18 @@ class _RSVPRequestHandler(BaseHTTPRequestHandler):
 
         if parsed.path == "/claim-open-slot":
             self._handle_claim_open_slot(parsed)
+            return
+
+        self._send_html(
+            404,
+            "<html><body><h1>Not Found</h1></body></html>",
+        )
+
+    def do_POST(self):
+        parsed = urlparse(self.path)
+
+        if parsed.path == "/rsvp/guests":
+            self._handle_rsvp_guests_post()
             return
 
         self._send_html(
@@ -70,6 +84,8 @@ class _RSVPRequestHandler(BaseHTTPRequestHandler):
             if member:
                 member_name = f"{member['first_name']} {member['last_name']}".strip()
 
+            safe_token = escape(token, quote=True)
+
             html = f"""
             <html>
               <body style="font-family: Arial, sans-serif; padding: 24px;">
@@ -77,6 +93,39 @@ class _RSVPRequestHandler(BaseHTTPRequestHandler):
                 <p>Thanks{f", {member_name}" if member_name else ""}. Your RSVP YES has been recorded.</p>
                 <p><strong>Course:</strong> {course_name}</p>
                 <p><strong>Date:</strong> {outing_date}</p>
+
+                <hr style="margin: 28px 0;">
+
+                <h2>Bringing a guest?</h2>
+                <p>If you plan to bring guests, add them here. Otherwise, you are all set.</p>
+
+                <form method="POST" action="/rsvp/guests">
+                  <input type="hidden" name="token" value="{safe_token}">
+
+                  <p><strong>Guest 1</strong></p>
+                  <p>
+                    <input type="text" name="guest1_first" placeholder="First name" style="width:160px; margin-right:8px;">
+                    <input type="text" name="guest1_last" placeholder="Last name" style="width:160px;">
+                  </p>
+
+                  <p><strong>Guest 2</strong></p>
+                  <p>
+                    <input type="text" name="guest2_first" placeholder="First name" style="width:160px; margin-right:8px;">
+                    <input type="text" name="guest2_last" placeholder="Last name" style="width:160px;">
+                  </p>
+
+                  <p><strong>Guest 3</strong></p>
+                  <p>
+                    <input type="text" name="guest3_first" placeholder="First name" style="width:160px; margin-right:8px;">
+                    <input type="text" name="guest3_last" placeholder="Last name" style="width:160px;">
+                  </p>
+
+                  <p style="margin-top: 16px;">
+                    <button type="submit" style="padding: 8px 16px; font-size: 14px;">
+                      Add guests
+                    </button>
+                  </p>
+                </form>
               </body>
             </html>
             """
@@ -88,6 +137,110 @@ class _RSVPRequestHandler(BaseHTTPRequestHandler):
               <body style="font-family: Arial, sans-serif; padding: 24px;">
                 <h1>RSVP Error</h1>
                 <p>{exc.__class__.__name__}: {str(exc)}</p>
+              </body>
+            </html>
+            """
+            self._send_html(400, html)
+
+    def _handle_rsvp_guests_post(self):
+        try:
+            assert self.token_service is not None
+            assert self.outing_service is not None
+            assert self.member_repo is not None
+            assert self.rsvp_service is not None
+
+            content_length = int(self.headers.get("Content-Length", 0))
+            raw_body = self.rfile.read(content_length).decode("utf-8")
+            params = parse_qs(raw_body)
+
+            token = params.get("token", [""])[0].strip()
+            if not token:
+                raise ValueError("Missing token.")
+
+            outing_id, member_id = self.token_service.decode_token(token)
+
+            outing = self.outing_service.get_outing(outing_id)
+            member = self.member_repo.get(member_id)
+
+            if not outing:
+                raise ValueError("Outing not found.")
+            if not member:
+                raise ValueError("Member not found.")
+
+            # Keep RSVP yes intact / refresh note.
+            self.rsvp_service.set_member_rsvp_status(
+                outing_id,
+                member_id,
+                "yes",
+                "RSVP yes via email link; guests submitted",
+            )
+
+            guest_repo = GuestRepository(self.rsvp_service.repo.db)
+
+            saved_guest_names: list[str] = []
+
+            for index in range(1, 4):
+                first_name = params.get(f"guest{index}_first", [""])[0].strip()
+                last_name = params.get(f"guest{index}_last", [""])[0].strip()
+
+                if not first_name and not last_name:
+                    continue
+
+                if not first_name:
+                    first_name = "Guest"
+
+                guest_id = guest_repo.create_guest(
+                    {
+                        "first_name": first_name,
+                        "last_name": last_name,
+                        "email": "",
+                        "phone": "",
+                        "notes": f"Added via RSVP form for outing {outing_id}",
+                        "active": 1,
+                    }
+                )
+
+                guest_repo.add_guest_to_outing(
+                    outing_id=outing_id,
+                    guest_id=guest_id,
+                    sponsoring_member_id=member_id,
+                    status="yes",
+                    note="Added via RSVP form",
+                )
+
+                saved_guest_names.append(f"{first_name} {last_name}".strip())
+
+            member_name = f"{member['first_name']} {member['last_name']}".strip()
+            course_name = str(outing["course_name"] or "")
+            outing_date = str(outing["outing_date"] or "")
+
+            if saved_guest_names:
+                guest_items = "".join(
+                    f"<li>{escape(name)}</li>" for name in saved_guest_names
+                )
+                guest_html = f"<ul>{guest_items}</ul>"
+            else:
+                guest_html = "<p>No guest names were entered.</p>"
+
+            html = f"""
+            <html>
+              <body style="font-family: Arial, sans-serif; padding: 24px;">
+                <h1>Guests Saved</h1>
+                <p>Thanks, {escape(member_name)}. Your guest information has been saved.</p>
+                <p><strong>Course:</strong> {escape(course_name)}</p>
+                <p><strong>Date:</strong> {escape(outing_date)}</p>
+                {guest_html}
+              </body>
+            </html>
+            """
+            self._send_html(200, html)
+
+        except Exception as exc:
+            html = f"""
+            <html>
+              <body style="font-family: Arial, sans-serif; padding: 24px;">
+                <h1>Guest RSVP Error</h1>
+                <p>{escape(exc.__class__.__name__)}: {escape(str(exc))}</p>
               </body>
             </html>
             """
