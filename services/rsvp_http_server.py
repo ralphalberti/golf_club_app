@@ -394,7 +394,12 @@ class _RSVPRequestHandler(BaseHTTPRequestHandler):
                 member_id=member_id,
             )
 
-            self.rsvp_service.record_yes_if_first(outing_id, member_id)
+            self.rsvp_service.set_member_rsvp_status(
+                outing_id,
+                member_id,
+                "yes",
+                "Claimed open slot via email link",
+            )
 
             member_name = f"{member['first_name']} {member['last_name']}".strip()
             course_name = str(outing["course_name"] or "")
