@@ -1,4 +1,4 @@
-# Golf Club Domain Notes
+# Golf Club Domain Notes (v2)
 
 ## Tee Time Allocation
 
@@ -44,10 +44,69 @@
 
 ## RSVP Process
 
+### Updated Model (v2)
+
 1. Outing created
-2. Invitations sent (~1 week before, 5 PM)
-3. Members respond (yes/no/maybe)
+2. Invitations sent automatically at ~5 PM on outing day
+3. Members respond via **RSVP link (email)**
 4. Only "yes" players are schedulable
+
+### Key Change
+
+- RSVP responses are **link-driven**, not email-parsed
+- Eliminates ambiguity and ensures accurate timestamps
+
+---
+
+## RSVP Link System
+
+### Overview
+
+- Each member receives a **unique RSVP link**
+- Example:
+
+  <https://localhost:8000/rsvp/yes?token=XYZ>
+
+- Token encodes:
+  - outing_id
+  - member_id
+  - signature (HMAC)
+
+### Behavior
+
+- Clicking link:
+  - validates token
+  - records RSVP = "yes"
+  - sets `responded_at` timestamp
+
+### Constraints
+
+- First valid "yes" click determines priority
+- Repeated clicks should not overwrite original timestamp (future refinement)
+
+---
+
+## RSVP Priority & Waitlist
+
+### Status: ACTIVE (no longer future)
+
+### Rules
+
+- Scheduling priority is determined by RSVP "Yes" timestamp
+- First-come-first-served ordering
+- Sponsor-linked units inherit sponsor timestamp
+
+### Capacity Handling
+
+- If RSVP demand exceeds capacity:
+  - earliest units are scheduled
+  - remaining units go to waitlist
+
+### Waitlist Behavior
+
+- Ordered by RSVP timestamp
+- When a cancellation occurs:
+  - earliest waitlisted unit is promoted
 
 ---
 
@@ -59,6 +118,11 @@
 ### Critical Constraint
 
 Guests MUST be scheduled with their sponsoring member
+
+### Scheduling Model
+
+- Sponsor + guests = single **Scheduling Unit**
+- Unit size impacts tee-time placement
 
 ---
 
@@ -79,6 +143,111 @@ Guests MUST be scheduled with their sponsoring member
 
 ---
 
+## Email Workflow (NEW)
+
+### Overview
+
+Outing communication follows a structured lifecycle:
+
+### 1. Invitation Email (Automated)
+
+- Sent at ~5 PM on outing day
+- Sent to all active members via BCC
+- Contains:
+  - outing date
+  - course
+  - greens fee
+  - RSVP link
+
+### 2. Tee-Time Request (Course)
+
+- Sent ~2 days after invitation
+- Purpose:
+  - inform course of required tee times
+- Based on RSVP "yes" count
+
+### 3. Draft Schedule (Members)
+
+- Sent after initial scheduling
+- Shows:
+  - tee times
+  - player groupings
+  - open slots
+
+### 4. Revised Schedule (Members)
+
+- Sent after late changes / cancellations
+
+### 5. Final Schedule (Course)
+
+- Sent after finalization
+- Operational document for course
+
+---
+
+## Email Template System (NEW)
+
+- Emails are template-based
+- Templates include:
+  - subject
+  - body
+  - variable placeholders
+
+### Variables
+
+- outing_date
+- course_name
+- fee
+- RSVP link
+
+### Admin Customization
+
+- Admins can:
+  - modify body before sending
+  - add custom notes (e.g., announcements)
+
+---
+
+## Invitation Preview Mode (NEW)
+
+### Purpose
+
+- Prevent accidental emails during development/testing
+
+### Behavior
+
+- Emails are written to file instead of sent
+- Location:
+
+  exports/preview/
+
+- Includes:
+  - recipient
+  - subject
+  - body
+  - RSVP link
+
+---
+
+## Scheduling Units (NEW)
+
+### Definition
+
+A Scheduling Unit is:
+
+- sponsor member
+- plus all associated guests
+
+### Rules
+
+- Units must not be split across tee times
+- Unit size affects:
+  - capacity checks
+  - reshuffle logic
+  - scoring
+
+---
+
 ## Cancellation Rules (Future)
 
 - <24h: 3-week suspension
@@ -95,39 +264,92 @@ Admin must always know:
 - what step comes next
 - what actions are pending
 
-## RSVP Priority & Waitlist (Future Requirement)
+### Suggested Workflow States
 
-### Summary
+- draft
+- invites_sent
+- rsvp_open
+- schedule_draft
+- schedule_final
+- completed
 
-Scheduling priority is determined by the timestamp of RSVP "Yes" responses.
+---
 
-### Rules
+## Future Considerations
 
-- Each RSVP "Yes" response must be timestamped.
-- Scheduling is first-come-first-serve based on that timestamp.
-- Sponsor-linked units (member + guests) are treated as a single schedulable unit.
-- Units are ordered by the sponsor’s "Yes" timestamp.
+- Preserve first RSVP timestamp (do not overwrite)
+- External hosting for RSVP endpoint
+- Email delivery tracking and retry
+- Waitlist UI
+- Automated scheduling trigger after RSVP cutoff
 
-### Capacity Handling
+---
 
-- If total RSVP-Yes units exceed tee-time capacity:
-  - The earliest units are scheduled.
-  - Remaining units are placed on a waitlist.
+## Domain Gaps Before Schema
 
-### Waitlist Behavior
+- Course contacts
+- Dated course fee schedules
+- Member suspensions
+- Scheduling eligibility
+- Outing snapshots
 
-- Waitlist is ordered by RSVP "Yes" timestamp.
-- When a scheduled player cancels:
-  - The earliest waitlisted unit is promoted into the schedule.
+---
 
-### UI Implications
+## Current Implementation Status
 
-- Edit Schedule dialog should display:
-  - RSVP-Yes eligible members only
-  - RSVP timestamp (e.g. "Yes at 2026-04-02 09:14")
-- Waitlisted members should be visible and ordered by timestamp.
+### Completed Recently
 
-### Notes
+- RSVP email token flow works:
+  - member clicks RSVP link
+  - RSVP status becomes `yes`
+  - original `responded_at` timestamp is preserved on repeat clicks
 
-- RSVP timestamp should reflect when status changed to "Yes".
-- Future email-based RSVP system must preserve accurate timestamps.
+- Cancellation email endpoint exists:
+  - `/rsvp/cancel?token=...`
+  - validates token
+  - removes scheduled member from outing
+  - updates RSVP status from `yes` to `invited`
+  - records note: `Cancelled via email link`
+
+- Waitlist auto-promotion works:
+  - when cancellation creates an open slot
+  - next waitlisted player is promoted automatically
+  - waitlist is based on RSVP `responded_at` order
+
+- Schedule editor supports:
+  - manual player removal
+  - optional waitlist promotion
+  - reduced popup friction
+  - ordered waitlist display
+
+- Test email mode improved:
+  - member identity appears in email subject
+  - member identity appears in email body
+  - useful when all test emails route to admin/developer inbox
+
+### Next Planned Work
+
+1. Add cancellation links to pairings and revised pairings email templates
+2. Trigger existing cancellation endpoint from those links
+3. Refine auto-promotion logic:
+   - respect guests/scheduling units
+   - do not skip first waitlisted unit automatically
+   - leave slot open if first waitlisted unit does not fit
+4. Add audit logging:
+   - who cancelled
+   - when they cancelled
+   - cancellation source: email link / admin
+   - who was auto-promoted, if applicable
+
+### Important Design Decisions
+
+- RSVP statuses are intentionally simple:
+  - `selected`
+  - `invited`
+  - `yes`
+- `no` and `maybe` are not part of the desired workflow
+- Non-response means not playing
+- Waitlist is derived, not stored:
+  - RSVP status = `yes`
+  - member is not assigned to a tee time
+- Admin tools should guide waitlist order but not strictly prevent override
