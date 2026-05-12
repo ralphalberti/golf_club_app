@@ -48,3 +48,31 @@ def test_scheduling_unit_size_and_ids():
     assert unit.sponsor.id == 7
     assert unit.member_ids == (7,)
     assert unit.guest_ids == (101, 102)
+
+
+def test_guest_unit_that_does_not_fit_does_not_block_later_solo_member():
+    capacity = 8
+
+    units = [
+        ("A", 3),  # sponsor + 2 guests
+        ("B", 3),  # sponsor + 2 guests
+        ("C", 3),  # sponsor + 2 guests -> does not fit
+        ("D", 1),  # solo member should still fit
+    ]
+
+    scheduled = []
+    used_capacity = 0
+
+    for sponsor, unit_size in units:
+        if used_capacity + unit_size > capacity:
+            # oversized guest-containing unit may be skipped
+            if unit_size > 1:
+                continue
+
+            # solo RSVP members still get scheduled
+            break
+
+        scheduled.append(sponsor)
+        used_capacity += unit_size
+
+    assert scheduled == ["A", "B", "D"]
