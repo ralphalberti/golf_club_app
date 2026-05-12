@@ -226,3 +226,166 @@ def test_scheduler_skips_oversized_guest_unit_but_schedules_later_solo_member(
         )
 
         assert expanded_size <= 4
+
+
+def test_waitlist_autopromotion_does_not_overfill_guest_capacity(tmp_path):
+
+    #
+    # Temp DB
+    #
+    db_path = tmp_path / "test_waitlist.db"
+
+    db = Database(db_path)
+
+    create_schema(db)
+
+    #
+    # Repositories
+    #
+    course_repo = CourseRepository(db)
+    member_repo = MemberRepository(db)
+    outing_repo = OutingRepository(db)
+    rsvp_repo = RSVPRepository(db)
+    guest_repo = GuestRepository(db)
+
+    scheduling_service = SchedulingService(db)
+
+    #
+    # Course
+    #
+    course_id = course_repo.create(
+        {
+            "name": "Test Course",
+        }
+    )
+
+    #
+    # Outing:
+    # 1 tee time
+    # max 4 players
+    #
+    outing_id = outing_repo.create(
+        {
+            "outing_date": "2026-05-01",
+            "course_id": course_id,
+            "start_time": "10:00",
+            "tee_interval_minutes": 9,
+            "tee_time_count": 1,
+            "max_players_per_tee_time": 4,
+            "status": "open",
+        }
+    )
+
+    #
+    # Members
+    #
+    member_ids = []
+
+    for name in ["A", "B", "C"]:
+        member_id = member_repo.create(
+            {
+                "first_name": name,
+                "last_name": "Member",
+                "joined_date": "2026-01-01",
+                "skill_tier": 1,
+            }
+        )
+
+        member_ids.append(member_id)
+
+    #
+    # RSVP yes in order
+    #
+    for member_id in member_ids:
+        rsvp_repo.record_yes_if_first(
+            outing_id,
+            member_id,
+        )
+
+    #
+    # A has 1 guest => size 2
+    # B has 1 guest => size 2
+    # C has 2 guests => size 3 (waitlisted)
+    #
+    guest_counts = {
+        member_ids[0]: 1,
+        member_ids[1]: 1,
+        member_ids[2]: 2,
+    }
+
+    for sponsor_member_id, guest_count in guest_counts.items():
+
+        for guest_num in range(guest_count):
+
+            guest_id = guest_repo.create_guest(
+                {
+                    "first_name": f"G{guest_num}",
+                    "last_name": f"S{sponsor_member_id}",
+                }
+            )
+
+            guest_repo.add_guest_to_outing(
+                outing_id=outing_id,
+                guest_id=guest_id,
+                sponsoring_member_id=sponsor_member_id,
+                status="yes",
+            )
+
+    #
+    # Initial schedule
+    #
+    scheduling_service.generate_schedule(outing_id)
+
+    assignments = outing_repo.get_assignments(outing_id)
+
+    scheduled_member_ids = {int(row["member_id"]) for row in assignments}
+
+    #
+    # A and B scheduled
+    #
+    assert member_ids[0] in scheduled_member_ids
+    assert member_ids[1] in scheduled_member_ids
+
+    #
+    # C waitlisted
+    #
+    assert member_ids[2] not in scheduled_member_ids
+
+    #
+    # Remove B from schedule
+    #
+    outing_repo.remove_member_from_schedule(
+        outing_id,
+        member_ids[1],
+    )
+
+    #
+    # Attempt autopromotion
+    #
+    outing_repo.auto_promote_waitlist(outing_id)
+
+    assignments = outing_repo.get_assignments(outing_id)
+
+    scheduled_member_ids = {int(row["member_id"]) for row in assignments}
+
+    #
+    # C still does NOT fit (requires size 3)
+    #
+    assert member_ids[2] not in scheduled_member_ids
+
+    #
+    # Expanded capacity still must not exceed 4
+    #
+    tee_times = outing_repo.get_tee_times(outing_id)
+
+    for tee_time in tee_times:
+
+        tee_time_id = int(tee_time["id"])
+
+        expanded_size = outing_repo._guest_aware_tee_time_size(
+            db.connect(),
+            outing_id,
+            tee_time_id,
+        )
+
+        assert expanded_size <= 4
