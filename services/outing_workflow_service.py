@@ -72,8 +72,9 @@ class OutingWorkflowService:
 
         invited_count = len(rsvp_rows)
         yes_count = sum(1 for row in rsvp_rows if str(row["status"] or "") == "yes")
-        no_count = sum(1 for row in rsvp_rows if str(row["status"] or "") == "no")
-        maybe_count = sum(1 for row in rsvp_rows if str(row["status"] or "") == "maybe")
+        selected_count = sum(
+            1 for row in rsvp_rows if str(row["status"] or "") == "selected"
+        )
         pending_count = sum(
             1 for row in rsvp_rows if str(row["status"] or "") == "invited"
         )
@@ -100,8 +101,7 @@ class OutingWorkflowService:
             "current_stage": str(current_stage or ""),
             "invited_count": invited_count,
             "yes_count": yes_count,
-            "no_count": no_count,
-            "maybe_count": maybe_count,
+            "selected_count": selected_count,
             "pending_count": pending_count,
             "capacity": capacity,
             "assigned_count": assigned_count,
