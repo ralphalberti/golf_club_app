@@ -346,6 +346,11 @@ class OutingRepository(BaseRepository):
                 (member_id, outing_id),
             )
 
+    # NOTE:
+    # This is guest-aware but still implemented at the repository layer.
+    # Future refactor target:
+    # move waitlist promotion into a service that uses SchedulingUnitService,
+    # so guest sizing logic is not duplicated here.
     def auto_promote_waitlist(self, outing_id: int) -> None:
         with self.db.get_conn() as conn:
             row = conn.execute(
@@ -417,6 +422,10 @@ class OutingRepository(BaseRepository):
                 )
                 return
 
+    # NOTE:
+    # This promotes only the first waitlisted RSVP-yes member.
+    # If that member's sponsor+guest unit does not fit, no later member is promoted.
+    # This preserves RSVP priority while preventing guests from creating fivesomes.
     def auto_promote_waitlist_to_tee_time(
         self,
         outing_id: int,

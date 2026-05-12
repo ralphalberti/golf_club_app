@@ -27,10 +27,14 @@ class SchedulingService:
         member_ids: list[int] | None = None,
     ) -> list[list[int]]:
         """
-        Native unit-aware behavior:
-        - if member_ids is omitted, schedule all RSVP=yes sponsor members
-        - build/score/place sponsor-linked units during schedule construction
-        - persist sponsor member assignments only
+        Sponsor-led guest-aware scheduling.
+
+        Scheduling priority belongs to RSVP-yes members.
+        Guests never compete independently for slots.
+        Sponsor + confirmed guests are evaluated as an expanded scheduling unit.
+        If a guest-containing unit does not fit, that expanded unit may remain
+        unscheduled while later solo RSVP-yes members may still be scheduled.
+        Guests must never displace RSVP-yes members.
         """
         tee_times = self.outing_repo.get_tee_times(outing_id)
         if not tee_times:
@@ -50,7 +54,9 @@ class SchedulingService:
         )
 
         if not member_ids:
-            raise ValueError("No members fit within the available tee-time capacity.")
+            raise ValueError(
+                "No scheduling units fit within the available tee-time capacity."
+            )
 
         member_map = self._get_member_map(member_ids)
 
@@ -70,7 +76,7 @@ class SchedulingService:
         groups = self._order_groups_for_tee_times(
             outing_id=outing_id,
             groups=groups,
-            enforced_member_ids=None,
+            enforced_member_ids=member_ids,
         )
 
         self.unit_service.validate_expanded_groups_for_member_ids(
@@ -164,6 +170,7 @@ class SchedulingService:
                 randomized=randomized,
                 mode=mode,
                 enforced_member_ids=enforced_member_ids,
+                use_units=enforce_units,
             )
 
             if candidate_groups is None:
@@ -193,6 +200,7 @@ class SchedulingService:
                 current_groups=current_groups,
                 mode=mode,
                 enforced_member_ids=enforced_member_ids,
+                use_units=enforce_units,
             )
 
             if enforce_units:
@@ -228,11 +236,14 @@ class SchedulingService:
         randomized: bool,
         mode: str,
         enforced_member_ids: list[int] | None = None,
+        use_units: bool = True,
     ) -> list[list[int]] | None:
         pairing_counts = self.pairing_service.get_pairing_counts(member_ids)
         rotation_stats = self.rotation_service.get_stats(member_ids)
 
-        if enforced_member_ids is None:
+        if not use_units:
+            unit_map = {}
+        elif enforced_member_ids is None:
             unit_map = self.unit_service.build_unit_map_for_outing(outing_id)
         else:
             unit_map = self.unit_service.build_unit_map_for_member_ids(
@@ -336,6 +347,7 @@ class SchedulingService:
             member_map=member_map,
             expected_member_ids=member_ids,
             enforced_member_ids=enforced_member_ids,
+            use_units=use_units,
         )
 
         return groups
@@ -387,10 +399,13 @@ class SchedulingService:
         current_groups: list[list[int]] | None,
         mode: str,
         enforced_member_ids: list[int] | None = None,
+        use_units: bool = True,
     ) -> float:
         pairing_counts = self.pairing_service.get_pairing_counts(member_ids)
 
-        if enforced_member_ids is None:
+        if not use_units:
+            unit_map = {}
+        elif enforced_member_ids is None:
             unit_map = self.unit_service.build_unit_map_for_outing(outing_id)
         else:
             unit_map = self.unit_service.build_unit_map_for_member_ids(
@@ -607,10 +622,13 @@ class SchedulingService:
         member_map: dict[int, dict],
         expected_member_ids: list[int],
         enforced_member_ids: list[int] | None = None,
+        use_units: bool = True,
     ) -> None:
         seen: set[int] = set()
 
-        if enforced_member_ids is None:
+        if not use_units:
+            unit_map = {}
+        elif enforced_member_ids is None:
             unit_map = self.unit_service.build_unit_map_for_outing(outing_id)
         else:
             unit_map = self.unit_service.build_unit_map_for_member_ids(
@@ -857,13 +875,34 @@ class SchedulingService:
             if unit_size > max(int(row["max_players"]) for row in tee_times):
                 continue
 
+            # if used_capacity + unit_size > capacity:
+            #     break
             if used_capacity + unit_size > capacity:
-                continue
+                if unit_size > 1:
+                    continue
+                break
 
             selected_member_ids.append(member_id)
             used_capacity += unit_size
 
         return selected_member_ids
+
+    def _first_member_ids_that_fit_member_capacity(
+        self,
+        tee_times,
+        member_ids: list[int],
+    ) -> list[int]:
+        """
+        Select the first RSVP-priority members up to raw member capacity.
+
+        Guests must not reduce the number of members who make the tee sheet.
+        Guest fit is handled after the member schedule is saved.
+        """
+        capacity = sum(int(row["max_players"]) for row in tee_times)
+        if capacity <= 0:
+            return []
+
+        return member_ids[:capacity]
 
     def _first_member_ids_that_fit_capacity(
         self,
@@ -875,6 +914,7 @@ class SchedulingService:
         if capacity <= 0:
             return []
 
+        max_tee_time_size = max(int(row["max_players"]) for row in tee_times)
         unit_map = self.unit_service.build_unit_map_for_outing(outing_id)
 
         selected_member_ids: list[int] = []
@@ -887,7 +927,14 @@ class SchedulingService:
 
             unit_size = len(unit.participants)
 
+            if unit_size > max_tee_time_size:
+                continue
+
+            # if used_capacity + unit_size > capacity:
+            #     continue
             if used_capacity + unit_size > capacity:
+                if unit_size > 1:
+                    continue
                 break
 
             selected_member_ids.append(member_id)

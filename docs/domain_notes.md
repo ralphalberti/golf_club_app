@@ -88,25 +88,40 @@
 
 ## RSVP Priority & Waitlist
 
-### Status: ACTIVE (no longer future)
+### Status: ACTIVE
 
-### Rules
+### Core Principle
 
-- Scheduling priority is determined by RSVP "Yes" timestamp
+Scheduling priority is determined by RSVP "yes" timestamp for MEMBERS.
+
+Guests do not independently participate in RSVP priority ordering.
+
+### Scheduling Priority
+
 - First-come-first-served ordering
-- Sponsor-linked units inherit sponsor timestamp
+- Earlier RSVP timestamps receive scheduling priority
+- Repeat RSVP clicks must not overwrite original timestamps
 
-### Capacity Handling
+### Member Scheduling
 
-- If RSVP demand exceeds capacity:
-  - earliest units are scheduled
-  - remaining units go to waitlist
+Members are scheduled first until tee-sheet capacity is exhausted.
+
+### Guest Scheduling
+
+Guests are evaluated only after member scheduling completes.
+
+Guests:
+
+- may fill unused slots
+- must remain attached to sponsor
+- must not displace members
+- should preferentially occupy later tee times
 
 ### Waitlist Behavior
 
-- Ordered by RSVP timestamp
-- When a cancellation occurs:
-  - earliest waitlisted unit is promoted
+Waitlist applies to RSVP-yes members who could not be scheduled.
+
+Guests may remain unscheduled even when their sponsor is scheduled.
 
 ---
 
@@ -115,24 +130,33 @@
 - Guests are tied to a sponsoring member
 - A member may bring multiple guests
 
-### Critical Constraint
+### Important Rules
 
-Guests MUST be scheduled with their sponsoring member
+- Guests do not have independent scheduling priority
+- Guests must never displace RSVP-yes members
+- Guests may only occupy leftover tee-sheet capacity
+- Guests must remain attached to their sponsor if scheduled
+- Guests should generally appear in later tee times
 
 ### Scheduling Model
 
-- Sponsor + guests = single **Scheduling Unit**
-- Unit size impacts tee-time placement
+Scheduling occurs in two passes:
 
----
+1. Members are scheduled first
+2. Guests are attached afterward where capacity permits
 
-## Scheduling Philosophy
+### Capacity Rules
 
-- Prefer foursomes
-- Use threesomes only when necessary
-- Place threesomes in earliest tee times
-- Minimize repeat pairings
-- Balance tee-time fairness over time
+Examples:
+
+- 4 open slots remaining
+  - sponsor + 2 guests may fit
+
+- 2 open slots remaining
+  - sponsor + 2 guests cannot fit
+  - guests remain unscheduled
+
+- Guests must never create fivesomes
 
 ---
 
@@ -229,22 +253,62 @@ Outing communication follows a structured lifecycle:
 
 ---
 
-## Scheduling Units (NEW)
+## Scheduling Units
 
 ### Definition
 
-A Scheduling Unit is:
+A Scheduling Unit represents:
 
-- sponsor member
-- plus all associated guests
+- a sponsor member
+- plus any confirmed guests attached to that sponsor
 
-### Rules
+### Important Clarification
 
-- Units must not be split across tee times
-- Unit size affects:
-  - capacity checks
-  - reshuffle logic
-  - scoring
+Scheduling priority belongs to RSVP-yes MEMBERS only.
+
+Guests never independently compete for tee-sheet capacity.
+
+### Core Scheduling Rules
+
+1. RSVP-yes members are scheduled first
+2. Guests must never displace RSVP-yes members
+3. Guests may only fill leftover/open tee-sheet capacity
+4. Guests must remain attached to their sponsoring member
+5. Guest-containing groups should be placed in later tee times when possible
+
+### Operational Behavior
+
+Initial schedule generation works in two phases:
+
+#### Phase 1 — Member Scheduling
+
+- RSVP-yes members are scheduled by RSVP priority
+- Scheduler optimizes:
+  - foursomes
+  - fairness
+  - pairing variety
+  - tee-time balance
+
+#### Phase 2 — Guest Attachment
+
+After members are scheduled:
+
+- sponsors with confirmed guests are evaluated
+- guests are attached only if:
+  - open slots remain
+  - sponsor tee time has sufficient capacity
+  - adding guests does not displace members
+  - no fivesomes are created
+
+### Important Constraint
+
+A guest cannot be scheduled unless their sponsor is already scheduled.
+
+### Waitlist Behavior
+
+Waitlist priority applies to members only.
+
+Guests are dependent additions and may remain unscheduled even when their sponsor is scheduled.
 
 ---
 
@@ -327,6 +391,11 @@ Admin must always know:
   - member identity appears in email body
   - useful when all test emails route to admin/developer inbox
 
+- Guest-aware waitlist promotion works:
+  - cancellation refills vacated tee time
+  - promotion respects expanded sponsor+guest capacity
+  - prevents accidental fivesomes
+
 ### Next Planned Work
 
 1. Add cancellation links to pairings and revised pairings email templates
@@ -340,6 +409,10 @@ Admin must always know:
    - when they cancelled
    - cancellation source: email link / admin
    - who was auto-promoted, if applicable
+5. Refine scheduling-unit fairness:
+   - sponsors + guests remain atomic requests
+   - sponsors are not scheduled without confirmed guests
+   - oversized units may be waitlisted while smaller later requests still fit
 
 ### Important Design Decisions
 
@@ -353,3 +426,62 @@ Admin must always know:
   - RSVP status = `yes`
   - member is not assigned to a tee time
 - Admin tools should guide waitlist order but not strictly prevent override
+
+---
+
+## Schedule Editor Expectations
+
+### Available Members Panel
+
+The Available Members panel must clearly indicate sponsor-linked guests.
+
+Examples:
+
+- Larry Adams (+2)
+- Larry Adams (+2 guests)
+
+Preferred UI:
+
+- sponsor displayed as expandable/collapsible node
+- guests displayed beneath sponsor
+
+Example:
+
+Larry Adams (+2)
+  ↳ Guest One
+  ↳ Guest Two
+
+### Scheduling Behavior
+
+- Sponsors and guests should move together during scheduling operations
+- Manual reassignment must preserve sponsor-guest grouping
+- Capacity validation must include guests
+
+---
+
+## Guest Placement Philosophy
+
+### Goals
+
+- maximize member participation
+- preserve sponsor/guest association
+- avoid fivesomes
+- preserve foursomes where possible
+- place guest groups later in the tee sheet
+
+### Preferred Outcome
+
+Earlier tee times:
+
+- primarily member-only groups
+
+Later tee times:
+
+- guest-containing groups
+- partially filled sponsor groups
+
+### Operational Philosophy
+
+Members are the primary participants of the outing.
+
+Guests are optional dependent additions that fill remaining operational capacity.
