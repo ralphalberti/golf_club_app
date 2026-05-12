@@ -45,7 +45,7 @@ WORKFLOW_STAGES = [
     "completed",
 ]
 
-RSVP_STATUSES = ["invited", "yes"]
+RSVP_STATUSES = ["selected", "invited", "yes"]
 
 MEMBER_EMAIL_TEMPLATES = [
     ("Invitation", "invitation"),
@@ -124,13 +124,13 @@ class OutingRSVPDialog(QDialog):
         self.remove_invite_button.hide()
         self.send_selected_email_button = QPushButton("Send Selected Members Email")
 
-        self.mark_member_invited_button = QPushButton("Reset to Pending")
+        self.mark_member_invited_button = QPushButton("Mark Pending")
         self.mark_member_yes_button = QPushButton("Mark Confirmed")
 
         self.add_guest_button = QPushButton("Add Guest to Outing")
         self.edit_guest_button = QPushButton("Edit Guest")
         self.remove_guest_button = QPushButton("Remove Guest")
-        self.mark_guest_invited_button = QPushButton("Guest Pending")
+        self.mark_guest_invited_button = QPushButton("Mark Guest Pending")
         self.mark_guest_yes_button = QPushButton("Guest Confirmed")
 
         self.member_email_template_combo = QComboBox()
@@ -349,7 +349,7 @@ class OutingRSVPDialog(QDialog):
 
         right_panel = QWidget()
         right_layout = QVBoxLayout(right_panel)
-        right_layout.addWidget(QLabel("Invited / Confirmed Members"))
+        right_layout.addWidget(QLabel("Selected / Pending / Confirmed Members"))
         right_layout.addWidget(self.member_rsvp_table)
 
         email_template_row = QHBoxLayout()
@@ -553,7 +553,7 @@ class OutingRSVPDialog(QDialog):
         open_spots = max(0, capacity - scheduled_count)
 
         self.eligible_summary_label.setText(
-            f"Pending: {pending_count}  |  "
+            f"Pending Invitation Response: {pending_count}  |  "
             f"Confirmed: {confirmed_count}  |  "
             f"Scheduled: {scheduled_count}  |  "
             f"Waitlist: {waitlist_count}  |  "
