@@ -65,7 +65,7 @@ class RSVPRepository(BaseRepository):
                         created_at,
                         updated_at
                     )
-                    VALUES (?, ?, 'invited', NULL, '', ?, ?)
+                    VALUES (?, ?, 'selected', NULL, '', ?, ?)
                     ON CONFLICT(outing_id, member_id) DO NOTHING
                     """,
                     (outing_id, member_id, now, now),
