@@ -3,7 +3,7 @@ from app.utils import now_iso
 
 
 class GuestRepository(BaseRepository):
-    VALID_STATUSES = {"invited", "yes", "no", "maybe"}
+    VALID_STATUSES = {"selected", "invited", "yes"}
 
     def list_all_guests(self, active_only: bool = True):
         with self.db.get_conn() as conn:
@@ -137,7 +137,7 @@ class GuestRepository(BaseRepository):
             raise ValueError(f"Invalid guest RSVP status: {status}")
 
         now = now_iso()
-        responded_at = now if status in {"yes", "no", "maybe"} else None
+        responded_at = now if status == "yes" else None
 
         with self.db.get_conn() as conn:
             conn.execute(
@@ -184,7 +184,7 @@ class GuestRepository(BaseRepository):
             raise ValueError(f"Invalid guest RSVP status: {status}")
 
         now = now_iso()
-        responded_at = now if status in {"yes", "no", "maybe"} else None
+        responded_at = now if status == "yes" else None
 
         with self.db.get_conn() as conn:
             conn.execute(

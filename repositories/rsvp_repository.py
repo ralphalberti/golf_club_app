@@ -3,7 +3,7 @@ from app.utils import now_iso
 
 
 class RSVPRepository(BaseRepository):
-    VALID_STATUSES = {"invited", "yes", "no", "maybe"}
+    VALID_STATUSES = {"selected", "invited", "yes"}
 
     def list_member_rsvps_for_outing(self, outing_id: int):
         with self.db.get_conn() as conn:
@@ -82,7 +82,7 @@ class RSVPRepository(BaseRepository):
             raise ValueError(f"Invalid RSVP status: {status}")
 
         now = now_iso()
-        responded_at = now if status in {"yes", "no", "maybe"} else None
+        responded_at = now if status == "yes" else None
 
         with self.db.get_conn() as conn:
             conn.execute(
