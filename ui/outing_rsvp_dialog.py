@@ -459,7 +459,7 @@ class OutingRSVPDialog(QDialog):
             member_item.setData(DataRole.UserRole, int(row["member_id"]))
 
             email_item = QTableWidgetItem(row["email"])
-            status_item = QTableWidgetItem(row["rsvp_status"])
+            status_item = QTableWidgetItem(self._format_rsvp_status(row["rsvp_status"]))
             responded_item = QTableWidgetItem(row["responded_at"])
             scheduled_item = QTableWidgetItem(row["scheduled"])
             tee_time_item = QTableWidgetItem(row["tee_time"])
@@ -479,6 +479,15 @@ class OutingRSVPDialog(QDialog):
 
         self.member_rsvp_table.resizeColumnsToContents()
         self.member_rsvp_table.horizontalHeader().setStretchLastSection(True)
+
+    def _format_rsvp_status(self, status: str) -> str:
+        labels = {
+            "selected": "Selected",
+            "invited": "Pending",
+            "yes": "Confirmed",
+        }
+
+    return labels.get(str(status or ""), str(status or ""))
 
     def _apply_member_row_styling(self, row_idx: int, row: dict):
         status = row["rsvp_status"]
@@ -1277,7 +1286,7 @@ class OutingRSVPDialog(QDialog):
                     successfully_sent_member_ids.append(member_id)
 
                 if successfully_sent_member_ids:
-                    self.rsvp_service.invite_members(
+                    self.rsvp_service.mark_members_invited(
                         self.outing_id,
                         successfully_sent_member_ids,
                     )
@@ -1540,7 +1549,7 @@ class OutingRSVPDialog(QDialog):
             ]
 
             if successful_ids:
-                self.rsvp_service.invite_members(self.outing_id, successful_ids)
+                self.rsvp_service.mark_members_invited(self.outing_id, successful_ids)
 
         message = (
             f"SMTP accepted {sent_count} email(s).\n\n"

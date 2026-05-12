@@ -27,6 +27,17 @@ class RSVPService:
     def invite_members(self, outing_id: int, member_ids: list[int]) -> None:
         self.repo.invite_members(outing_id, member_ids)
 
+    def mark_members_invited(
+        self,
+        outing_id: int,
+        member_ids: list[int],
+    ) -> None:
+
+        self.repo.mark_members_invited(
+            outing_id,
+            member_ids,
+        )
+
     def invite_all_active_members(self, outing_id: int) -> None:
         rows = self.repo.list_uninvited_active_members_for_outing(outing_id)
         member_ids = [int(row["id"]) for row in rows]

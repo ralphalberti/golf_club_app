@@ -71,6 +71,36 @@ class RSVPRepository(BaseRepository):
                     (outing_id, member_id, now, now),
                 )
 
+    def mark_members_invited(
+        self,
+        outing_id: int,
+        member_ids: list[int],
+    ) -> None:
+
+        if not member_ids:
+            return
+
+        now = now_iso()
+
+        with self.db.get_conn() as conn:
+
+            placeholders = ",".join("?" for _ in member_ids)
+
+            conn.execute(
+                f"""
+                UPDATE outing_rsvps
+                SET
+                    status = 'invited',
+                    updated_at = ?
+                WHERE outing_id = ?
+                  AND member_id IN ({placeholders})
+                  AND status = 'selected'
+                """,
+                (now, outing_id, *member_ids),
+            )
+
+            conn.commit()
+
     def set_member_rsvp_status(
         self,
         outing_id: int,
