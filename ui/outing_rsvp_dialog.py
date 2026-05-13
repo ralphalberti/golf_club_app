@@ -45,7 +45,7 @@ WORKFLOW_STAGES = [
     "completed",
 ]
 
-RSVP_STATUSES = ["selected", "invited", "yes"]
+RSVP_STATUSES = ["invited", "yes"]
 
 MEMBER_EMAIL_TEMPLATES = [
     ("Invitation", "invitation"),
@@ -349,7 +349,7 @@ class OutingRSVPDialog(QDialog):
 
         right_panel = QWidget()
         right_layout = QVBoxLayout(right_panel)
-        right_layout.addWidget(QLabel("Selected / Pending / Confirmed Members"))
+        right_layout.addWidget(QLabel("Invited / Confirmed Members"))
         right_layout.addWidget(self.member_rsvp_table)
 
         email_template_row = QHBoxLayout()
@@ -482,12 +482,11 @@ class OutingRSVPDialog(QDialog):
 
     def _format_rsvp_status(self, status: str) -> str:
         labels = {
-            "selected": "Selected",
-            "invited": "Pending",
+            "invited": "Invited",
             "yes": "Confirmed",
         }
 
-    return labels.get(str(status or ""), str(status or ""))
+        return labels.get(str(status or ""), str(status or ""))
 
     def _apply_member_row_styling(self, row_idx: int, row: dict):
         status = row["rsvp_status"]
@@ -562,7 +561,7 @@ class OutingRSVPDialog(QDialog):
         open_spots = max(0, capacity - scheduled_count)
 
         self.eligible_summary_label.setText(
-            f"Pending Invitation Response: {pending_count}  |  "
+            f"Invited: {pending_count}  |  "
             f"Confirmed: {confirmed_count}  |  "
             f"Scheduled: {scheduled_count}  |  "
             f"Waitlist: {waitlist_count}  |  "
@@ -1286,7 +1285,7 @@ class OutingRSVPDialog(QDialog):
                     successfully_sent_member_ids.append(member_id)
 
                 if successfully_sent_member_ids:
-                    self.rsvp_service.mark_members_invited(
+                    self.rsvp_service.invite_members(
                         self.outing_id,
                         successfully_sent_member_ids,
                     )
@@ -1549,7 +1548,7 @@ class OutingRSVPDialog(QDialog):
             ]
 
             if successful_ids:
-                self.rsvp_service.mark_members_invited(self.outing_id, successful_ids)
+                self.rsvp_service.invite_members(self.outing_id, successful_ids)
 
         message = (
             f"SMTP accepted {sent_count} email(s).\n\n"

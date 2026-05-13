@@ -52,6 +52,19 @@ class RSVPService:
     ) -> None:
         self.repo.set_member_rsvp_status(outing_id, member_id, status, note)
 
+    def record_yes_if_first(
+        self,
+        outing_id: int,
+        member_id: int,
+        note: str = "",
+    ) -> None:
+
+        self.repo.record_yes_if_first(
+            outing_id,
+            member_id,
+            note,
+        )
+
     def remove_member_rsvp(self, outing_id: int, member_id: int) -> None:
         self.repo.remove_member_rsvp(outing_id, member_id)
 

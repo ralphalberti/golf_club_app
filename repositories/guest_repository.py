@@ -3,7 +3,7 @@ from app.utils import now_iso
 
 
 class GuestRepository(BaseRepository):
-    VALID_STATUSES = {"selected", "invited", "yes"}
+    VALID_STATUSES = {"invited", "yes"}
 
     def list_all_guests(self, active_only: bool = True):
         with self.db.get_conn() as conn:
