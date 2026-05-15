@@ -18,3 +18,7 @@ DEFAULT_PLAY_DAYS = ["Monday", "Thursday"]
 
 ROLE_ADMIN = "admin"
 ROLE_MEMBER = "member"
+
+# Development safety switch for testing member email sends.
+# Set to None for real production sends.
+EMAIL_DEV_SEND_LIMIT = 20

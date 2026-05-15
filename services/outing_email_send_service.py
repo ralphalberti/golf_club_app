@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from app.config import RSVP_SERVER_HOST, RSVP_SERVER_PORT
+# from app.config import RSVP_SERVER_HOST, RSVP_SERVER_PORT
+from app.config import RSVP_SERVER_HOST, RSVP_SERVER_PORT, EMAIL_DEV_SEND_LIMIT
 from services.outing_workflow_service import OutingWorkflowService
 from services.rsvp_token_service import RSVPTokenService
 import html
@@ -272,10 +273,11 @@ class OutingEmailSendService:
         }
 
         attempted = 0
-        sent = 0
         skipped: list[dict] = []
         failed: list[dict] = []
         seen_member_ids: set[int] = set()
+
+        messages: list[dict] = []
 
         for member_id in member_ids:
             member_id = int(member_id)
@@ -383,16 +385,15 @@ class OutingEmailSendService:
                     )
                     body_html = test_html_header + body_html
 
-                self.email_service.send_email(
-                    outing_id=outing_id,
-                    to_email=to_email,
-                    subject=subject_text,
-                    body_text=body_text,
-                    body_html=body_html,
-                    attachments=[],
-                    recipient_type="member",
+                messages.append(
+                    {
+                        "to_email": to_email,
+                        "subject": subject_text,
+                        "body_text": body_text,
+                        "body_html": body_html,
+                        "attachments": [],
+                    }
                 )
-                sent += 1
 
             except Exception as exc:
                 failed.append(
@@ -402,6 +403,20 @@ class OutingEmailSendService:
                         "error": str(exc),
                     }
                 )
+
+        if EMAIL_DEV_SEND_LIMIT is not None:
+            messages = messages[:EMAIL_DEV_SEND_LIMIT]
+            attempted = min(attempted, EMAIL_DEV_SEND_LIMIT)
+        bulk_result = self.email_service.send_personalized_bulk(
+            outing_id=outing_id,
+            messages=messages,
+            recipient_type="member",
+        )
+
+        sent = int(bulk_result["sent_count"])
+
+        failed.extend(bulk_result["failed"])
+        skipped.extend(bulk_result["skipped"])
 
         if sent > 0:
             self.draft_service.mark_sent(

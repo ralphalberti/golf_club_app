@@ -1,5 +1,22 @@
 # Golf Club Domain Notes (v2)
 
+## Active Development Database
+
+Primary active development database:
+
+- `data/golf_club.db`
+
+Legacy/development database files may still exist, including:
+
+- `app.db`
+- backup database snapshots under `data/`
+
+The desktop application and RSVP HTTP server must both point to the same active database.
+When RSVP behavior changes, restart the RSVP server before testing email-link flows.
+
+---
+
+
 ## Tee Time Allocation
 
 - Each course provides a fixed number of tee times to the club
@@ -82,7 +99,21 @@
 ### Constraints
 
 - First valid "yes" click determines priority
-- Repeated clicks should not overwrite original timestamp (future refinement)
+- Repeated clicks should not overwrite original timestamp
+
+### Important Persistence Rule
+
+RSVP email-link clicks must create RSVP rows if none exist.
+
+Implementation detail:
+
+- RSVP email handlers use `record_yes_if_first()`
+- RSVP email handlers must not rely on `set_member_rsvp_status()` for first-click YES recording
+
+Reason:
+
+- Email invitations may be sent before explicit RSVP rows exist for every recipient
+- First RSVP click must create the row and preserve original timestamp ordering
 
 ---
 
@@ -396,20 +427,27 @@ Admin must always know:
   - promotion respects expanded sponsor+guest capacity
   - prevents accidental fivesomes
 
+- Fixture-backed scheduler integration tests exist:
+  - temporary SQLite database
+  - real schema/bootstrap path
+  - guest-aware scheduling capacity checks
+  - waitlist auto-promotion overflow protection
+
 ### Next Planned Work
 
-1. Add cancellation links to pairings and revised pairings email templates
-2. Trigger existing cancellation endpoint from those links
-3. Refine auto-promotion logic:
+1. Fix email delivery reliability and recipient accounting
+2. Add cancellation links to pairings and revised pairings email templates
+3. Trigger existing cancellation endpoint from those links
+4. Refine auto-promotion logic:
    - respect guests/scheduling units
    - do not skip first waitlisted unit automatically
    - leave slot open if first waitlisted unit does not fit
-4. Add audit logging:
+5. Add audit logging:
    - who cancelled
    - when they cancelled
    - cancellation source: email link / admin
    - who was auto-promoted, if applicable
-5. Refine scheduling-unit fairness:
+6. Refine scheduling-unit fairness:
    - sponsors + guests remain atomic requests
    - sponsors are not scheduled without confirmed guests
    - oversized units may be waitlisted while smaller later requests still fit
@@ -417,10 +455,10 @@ Admin must always know:
 ### Important Design Decisions
 
 - RSVP statuses are intentionally simple:
-  - `selected`
   - `invited`
   - `yes`
-- `no` and `maybe` are not part of the desired workflow
+- `selected`, `no`, and `maybe` are not part of the desired workflow
+- Invitation targeting is eligibility-driven, not manually staged
 - Non-response means not playing
 - Waitlist is derived, not stored:
   - RSVP status = `yes`

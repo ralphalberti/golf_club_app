@@ -6,30 +6,31 @@
 
 ### Simplify RSVP State Model
 
-- [ ] Replace current status system with:
-  - `selected`
+- [x] Simplify RSVP/member participation statuses to:
   - `invited`
   - `yes`
-- [ ] Remove:
+- [x] Remove active use of:
+  - `selected`
   - `no`
   - `maybe`
-- [ ] Rules:
-  - `selected` → chosen but not emailed
-  - `invited` → email sent
+- [x] Rules:
+  - eligible active members receive invitations unless excluded by eligibility rules
+  - `invited` → invitation sent / pending response
   - `yes` → confirmed playing
-  - all others → not playing (no tracking needed)
-- [ ] Update:
+  - non-response means not participating
+- [x] Update:
   - database constraint (`outing_rsvps.status`)
-  - service logic
+  - repository validation
+  - RSVP link handling
   - UI labels
   - workflow summary alignment
-- [ ] Align UI, workflow, and scheduler logic
 
 ### Fix RSVP Token Flow
 
-- [ ] Restore or replace `record_yes_if_first`
-- [ ] Ensure email RSVP links correctly mark member as `yes`
-- [ ] Maintain correct waitlist ordering (based on responded_at)
+- [x] Restore/use `record_yes_if_first`
+- [x] Ensure email RSVP links correctly mark member as `yes`
+- [x] Ensure RSVP link clicks create rows if none exist
+- [x] Maintain correct waitlist ordering based on original `responded_at`
 
 ### Disable Manual Member Movement
 
@@ -51,11 +52,10 @@
 
 ### Pre-Invitation State (UI Alignment)
 
-- [ ] Introduce `selected` state in UI
-- [ ] Rename or clarify:
+- [x] Do not introduce `selected` state
+- [x] Confirm workflow is eligibility-driven, not manually staged
+- [ ] Rename/clarify UI where needed:
   - "Invited / Confirmed Members" pane
-- [ ] Ensure Workflow Summary matches actual state:
-  - preparing draft happens before "invited"
 
 ---
 
@@ -79,7 +79,7 @@
   - Invited / Confirmed (right pane)
 - [ ] Prevent duplicate conceptual states
 - [ ] Improve visual feedback for:
-  - selected vs invited vs confirmed
+  - invited vs confirmed
 - [ ] Ensure members do not appear in both panes incorrectly
 
 ### Outing Status Field Review
@@ -105,6 +105,11 @@
 
 ## Notes
 
+### Active Development Database
+
+- Active database: `data/golf_club.db`
+- Restart the RSVP server after RSVP/link-handling code changes
+
 - Focus first on:
   - completing end-to-end RSVP → Schedule flow
   - stabilizing current system
@@ -124,7 +129,7 @@
 
 ## Email / Communication
 
-### Fix Email Delivery Reliability
+### Fix Email Delivery Reliability — NEXT PRIORITY
 
 - [ ] Investigate high failure rate in email sending (e.g., 76 sent / 26 failed)
 - [ ] Log detailed failure reasons per email
@@ -325,7 +330,7 @@
   - record cancellation event
 
 - [ ] Introduce RSVP status: `cancelled`
-  - update schema to allow: `selected`, `invited`, `yes`, `cancelled`
+  - update schema to allow: `invited`, `yes`, `cancelled`
   - ensure cancelled members are excluded from:
     - scheduling
     - waitlist
@@ -419,15 +424,16 @@
 
 RSVP statuses have been simplified:
 
-- selected (pre-invite staging)
 - invited
 - yes
 
 Notes:
 
-- "maybe" and "no" are not used
-- Members are either playing ("yes") or not participating
-- Admin removals revert status from "yes" → "invited" with audit note
+- `selected`, `maybe`, and `no` are not used
+- Eligible active members receive invitations unless excluded by rules
+- Members are either invited, confirmed playing (`yes`), or not participating by non-response
+- Admin removals revert status from `yes` → `invited` with audit note
+- RSVP email-link YES clicks use `record_yes_if_first()` and create RSVP rows if missing
 
 ---
 
