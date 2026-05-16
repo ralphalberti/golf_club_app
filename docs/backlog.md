@@ -210,8 +210,8 @@
 
 ### Add Guests Main Tab
 
-- [ ] Add top-level `Guests` tab
-- [ ] Include buttons:
+- [x] Add top-level `Guests` tab
+- [x] Include buttons:
   - Add Guest
   - Edit Guest
   - Delete Guest
@@ -219,7 +219,7 @@
 
 ### Add Course Contacts Management
 
-- [ ] Add Course Contacts management UI
+- [x] Add Course Contacts management UI
 - [ ] Consider either:
   - standalone `Course Contacts` tab
   - or unified People model
@@ -606,3 +606,36 @@ When a member clicks an RSVP YES link after a schedule has already been generate
 - Show clear confirmation:
   - "You have been added to the schedule"
   - or "You are on the waitlist"
+
+---
+
+### Guest Submission During Invitation RSVP
+
+- [ ] Define how guests submitted during RSVP should flow into the system
+- [ ] Determine whether RSVP-submitted guests should:
+  - create new `guests` records automatically
+  - match existing `guests` records when possible
+  - require admin review before becoming official records
+- [ ] Define matching rules for submitted guests:
+  - first name
+  - last name
+  - email, if provided
+  - sponsoring member
+- [ ] Define how submitted guests are associated with:
+  - `guests`
+  - `outing_guests`
+  - sponsoring member
+  - outing
+- [ ] Prevent duplicate guest records when the same guest plays multiple times
+- [ ] Add admin review workflow for uncertain guest matches
+- [ ] Ensure guest submission preserves scheduling rules:
+  - guests remain attached to sponsor
+  - guests do not displace members
+  - guests do not independently affect RSVP priority
+- [ ] Long-term Django/member portal vision:
+  - members can log in
+  - members can maintain their profile
+  - members can manage reusable guest records
+  - members can attach existing guests to an outing signup
+  - members can add a new guest during outing signup
+  - admin can review/edit guest records

@@ -48,13 +48,15 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE TABLE IF NOT EXISTS courses (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    facility_id INTEGER,
     name TEXT NOT NULL UNIQUE,
     address TEXT,
     active INTEGER NOT NULL DEFAULT 1,
     notes TEXT,
     contact_name TEXT,
     contact_email TEXT,
-    preferred_format TEXT DEFAULT 'both'
+    preferred_format TEXT DEFAULT 'both',
+    FOREIGN KEY (facility_id) REFERENCES facilities(id)
 );
 
 CREATE TABLE IF NOT EXISTS outings (
@@ -273,12 +275,58 @@ CREATE TABLE IF NOT EXISTS course_fee_schedules (
     updated_at TEXT NOT NULL,
     FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
 );
+
+CREATE TABLE IF NOT EXISTS course_contacts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    course_id INTEGER NOT NULL,
+
+    first_name TEXT NOT NULL,
+    last_name TEXT NOT NULL,
+
+    title TEXT,
+    email TEXT,
+    phone TEXT,
+
+    notes TEXT,
+
+    active INTEGER NOT NULL DEFAULT 1,
+
+    receives_hold_requests INTEGER NOT NULL DEFAULT 1,
+    receives_final_schedule INTEGER NOT NULL DEFAULT 1,
+
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+
+    FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS facilities (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    address TEXT,
+    phone TEXT,
+    website TEXT,
+    notes TEXT,
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
 """
 
 
 def create_schema(db: Database) -> None:
     with db.get_conn() as conn:
         conn.executescript(SCHEMA_SQL)
+
+        course_columns = {
+            row["name"] for row in conn.execute("PRAGMA table_info(courses)").fetchall()
+        }
+
+        if "facility_id" not in course_columns:
+            conn.execute("""
+                ALTER TABLE courses
+                ADD COLUMN facility_id INTEGER
+                """)
 
         outing_columns = {
             row["name"] for row in conn.execute("PRAGMA table_info(outings)").fetchall()

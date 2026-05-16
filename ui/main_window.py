@@ -23,6 +23,7 @@ from ui.shared.forms import MemberFormDialog, CourseFormDialog, OutingFormDialog
 from ui.outing_rsvp_dialog import OutingRSVPDialog
 from ui.email_draft_dialog import EmailDraftDialog
 from ui.shared.messages import show_error, show_info, show_warning
+from ui.course_contacts_dialog import CourseContactsDialog
 
 Align = Qt.AlignmentFlag
 DataRole = Qt.ItemDataRole
@@ -37,6 +38,7 @@ class MainWindow(QMainWindow):
         current_user,
         member_service,
         course_service,
+        course_contact_service,
         outing_service,
         reporting_service,
         scheduling_service,
@@ -53,6 +55,7 @@ class MainWindow(QMainWindow):
         self.current_user = current_user
         self.member_service = member_service
         self.course_service = course_service
+        self.course_contact_service = course_contact_service
         self.outing_service = outing_service
         self.reporting_service = reporting_service
         self.scheduling_service = scheduling_service
@@ -166,14 +169,17 @@ class MainWindow(QMainWindow):
         add_btn = QPushButton("Add Course")
         edit_btn = QPushButton("Edit Course")
         delete_btn = QPushButton("Delete Course")
+        contacts_btn = QPushButton("Course Contacts")
 
         add_btn.clicked.connect(self.add_course)
         edit_btn.clicked.connect(self.edit_course)
         delete_btn.clicked.connect(self.delete_course)
+        contacts_btn.clicked.connect(self.manage_course_contacts)
 
         buttons.addWidget(add_btn)
         buttons.addWidget(edit_btn)
         buttons.addWidget(delete_btn)
+        buttons.addWidget(contacts_btn)
         buttons.addStretch()
 
         layout.addLayout(buttons)
@@ -594,6 +600,30 @@ class MainWindow(QMainWindow):
                 "Delete Failed",
                 f"Could not delete course.\n\n{exc}",
             )
+
+    def manage_course_contacts(self):
+        course_id = self.selected_row_id(self.courses_table)
+
+        if not course_id:
+            show_warning(self, "No Selection", "Select a course first.")
+            return
+
+        course = self.course_service.get_course(course_id)
+
+        if not course:
+            show_warning(
+                self,
+                "Course Not Found",
+                "Could not load the selected course.",
+            )
+            return
+
+        dlg = CourseContactsDialog(
+            course=course,
+            contact_service=self.course_contact_service,
+            parent=self,
+        )
+        dlg.exec_()
 
     def add_outing(self):
         courses = self.course_service.list_courses()

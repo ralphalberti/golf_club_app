@@ -26,6 +26,7 @@ from services.distribution_service import DistributionService
 from services.outing_email_draft_service import OutingEmailDraftService
 from services.outing_email_send_service import OutingEmailSendService
 from services.course_fee_schedule_service import CourseFeeScheduleService
+from services.course_contact_service import CourseContactService
 from ui.login_dialog import LoginDialog
 from ui.main_window import MainWindow
 
@@ -46,6 +47,7 @@ def bootstrap_and_run() -> None:
     member_service = MemberService(member_repo, reporting_repo)
 
     course_service = CourseService(db)
+    course_contact_service = CourseContactService(db)
     outing_service = OutingService(db)
     reporting_service = ReportingService(db)
     scheduling_service = SchedulingService(db)
@@ -78,6 +80,7 @@ def bootstrap_and_run() -> None:
         current_user=user,
         member_service=member_service,
         course_service=course_service,
+        course_contact_service=course_contact_service,
         outing_service=outing_service,
         reporting_service=reporting_service,
         scheduling_service=scheduling_service,
