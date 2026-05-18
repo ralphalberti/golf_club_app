@@ -610,3 +610,21 @@ class OutingRepository(BaseRepository):
             ).fetchone()
 
         return int(row["tee_time_id"]) if row else None
+
+    def get_email_delivery_summary(self, outing_id: int):
+        with self.db.get_conn() as conn:
+            return conn.execute(
+                """
+                SELECT
+                    recipient_type,
+                    subject,
+                    status,
+                    COUNT(*) AS count,
+                    MAX(sent_at) AS last_at
+                FROM email_logs
+                WHERE outing_id = ?
+                GROUP BY recipient_type, subject, status
+                ORDER BY last_at DESC
+                """,
+                (outing_id,),
+            ).fetchall()

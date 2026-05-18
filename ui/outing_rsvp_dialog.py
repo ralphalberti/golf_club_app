@@ -197,6 +197,7 @@ class OutingRSVPDialog(QDialog):
         self.course_hold_draft_status_value_label = QLabel("--")
         self.course_final_draft_status_value_label = QLabel("--")
         self.revised_needed_status_value_label = QLabel("--")
+        self.email_delivery_summary_value_label = QLabel("--")
 
         # workflow_value_style = "font-weight: 600; color: #e6c65b;"
         workflow_value_style = "font-weight: 600; color: #f5d76e;"
@@ -215,6 +216,7 @@ class OutingRSVPDialog(QDialog):
             self.course_hold_draft_status_value_label,
             self.course_final_draft_status_value_label,
             self.revised_needed_status_value_label,
+            self.email_delivery_summary_value_label,
         ):
             label.setStyleSheet(workflow_value_style)
 
@@ -314,6 +316,12 @@ class OutingRSVPDialog(QDialog):
         right_column.addLayout(
             status_row(
                 "Revised Pairings Needed", self.revised_needed_status_value_label
+            )
+        )
+        right_column.addLayout(
+            status_row(
+                "Email Delivery",
+                self.email_delivery_summary_value_label,
             )
         )
 
@@ -808,19 +816,42 @@ class OutingRSVPDialog(QDialog):
             )
         )
 
-        self.pairings_draft_status_value_label.setText(
-            self._format_draft_status(
-                snapshot.get("pairings_draft_status", ""),
-                snapshot.get("pairings_sent_at", ""),
-            )
-        )
+        pairings_status = str(snapshot.get("pairings_draft_status", ""))
+        pairings_sent_at = str(snapshot.get("pairings_sent_at", ""))
+        revision_detected = bool(snapshot.get("schedule_revision_detected", False))
 
-        self.revised_pairings_draft_status_value_label.setText(
-            self._format_draft_status(
-                snapshot.get("revised_pairings_draft_status", ""),
-                snapshot.get("revised_pairings_sent_at", ""),
+        if pairings_status == "sent" and revision_detected:
+            self.pairings_draft_status_value_label.setText(
+                self._format_health_status(
+                    "bad",
+                    "Sent but schedule changed",
+                )
             )
-        )
+        else:
+            self.pairings_draft_status_value_label.setText(
+                self._format_draft_status(
+                    pairings_status,
+                    pairings_sent_at,
+                )
+            )
+
+        revised_status = str(snapshot.get("revised_pairings_draft_status", ""))
+        revised_sent_at = str(snapshot.get("revised_pairings_sent_at", ""))
+
+        if revision_detected and not revised_status:
+            self.revised_pairings_draft_status_value_label.setText(
+                self._format_health_status(
+                    "warning",
+                    "Needed but not prepared",
+                )
+            )
+        else:
+            self.revised_pairings_draft_status_value_label.setText(
+                self._format_draft_status(
+                    revised_status,
+                    revised_sent_at,
+                )
+            )
 
         self.course_hold_draft_status_value_label.setText(
             self._format_draft_status(
@@ -845,6 +876,58 @@ class OutingRSVPDialog(QDialog):
         else:
             self.revised_needed_status_value_label.setText(
                 self._format_health_status("good", "No")
+            )
+
+        self._update_email_delivery_summary_label()
+
+    def _update_email_delivery_summary_label(self):
+        try:
+            rows = self.outing_service.get_email_delivery_summary(self.outing_id)
+        except Exception:
+            self.email_delivery_summary_value_label.setText(
+                self._format_health_status("neutral", "Unavailable")
+            )
+            return
+
+        if not rows:
+            self.email_delivery_summary_value_label.setText(
+                self._format_health_status("neutral", "No email logs")
+            )
+            return
+
+        sent_count = 0
+        failed_count = 0
+        last_at = ""
+
+        for row in rows:
+            status = str(row["status"] or "").lower()
+            count = int(row["count"] or 0)
+
+            if status == "sent":
+                sent_count += count
+            elif status == "failed":
+                failed_count += count
+
+            row_last_at = str(row["last_at"] or "")
+            if row_last_at and (not last_at or row_last_at > last_at):
+                last_at = row_last_at
+
+        formatted_last_at = self._format_datetime_mmddyyyy_ampm(last_at)
+
+        if failed_count > 0:
+            self.email_delivery_summary_value_label.setText(
+                self._format_health_status(
+                    "bad",
+                    f"Sent {sent_count} / Failed {failed_count} "
+                    f"(Last: {formatted_last_at})",
+                )
+            )
+        else:
+            self.email_delivery_summary_value_label.setText(
+                self._format_health_status(
+                    "good",
+                    f"Sent {sent_count} / Failed 0 " f"(Last: {formatted_last_at})",
+                )
             )
 
     def open_draft_editor(self):

@@ -105,3 +105,6 @@ class OutingService:
         member_id: int,
     ) -> int | None:
         return self.repo.get_member_tee_time_id_for_outing(outing_id, member_id)
+
+    def get_email_delivery_summary(self, outing_id: int):
+        return self.repo.get_email_delivery_summary(outing_id)
