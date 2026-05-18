@@ -85,20 +85,26 @@ class MainWindow(QMainWindow):
         self.assignments_table = QTableWidget()
 
         # Table behavior
-        self.members_table.setSelectionBehavior(SelectionBehavior.SelectRows)
-        self.members_table.setSelectionMode(SelectionMode.SingleSelection)
+        # self.members_table.setSelectionBehavior(SelectionBehavior.SelectRows)
+        # self.members_table.setSelectionMode(SelectionMode.SingleSelection)
+        #
+        # self.facilities_table.setSelectionBehavior(SelectionBehavior.SelectRows)
+        # self.facilities_table.setSelectionMode(SelectionMode.SingleSelection)
+        #
+        # self.courses_table.setSelectionBehavior(SelectionBehavior.SelectRows)
+        # self.courses_table.setSelectionMode(SelectionMode.SingleSelection)
+        #
+        # self.outings_table.setSelectionBehavior(SelectionBehavior.SelectRows)
+        # self.outings_table.setSelectionMode(SelectionMode.SingleSelection)
+        #
+        # self.assignments_table.setSelectionBehavior(SelectionBehavior.SelectRows)
+        # self.assignments_table.setSelectionMode(SelectionMode.SingleSelection)
 
-        self.facilities_table.setSelectionBehavior(SelectionBehavior.SelectRows)
-        self.facilities_table.setSelectionMode(SelectionMode.SingleSelection)
-
-        self.courses_table.setSelectionBehavior(SelectionBehavior.SelectRows)
-        self.courses_table.setSelectionMode(SelectionMode.SingleSelection)
-
-        self.outings_table.setSelectionBehavior(SelectionBehavior.SelectRows)
-        self.outings_table.setSelectionMode(SelectionMode.SingleSelection)
-
-        self.assignments_table.setSelectionBehavior(SelectionBehavior.SelectRows)
-        self.assignments_table.setSelectionMode(SelectionMode.SingleSelection)
+        self._configure_table(self.members_table)
+        self._configure_table(self.facilities_table)
+        self._configure_table(self.courses_table)
+        self._configure_table(self.outings_table)
+        self._configure_table(self.assignments_table)
 
         # Tabs
         self.tabs.addTab(self._build_members_tab(), "Members")
@@ -109,6 +115,10 @@ class MainWindow(QMainWindow):
         # Signals
         self.tabs.currentChanged.connect(self._on_tab_changed)
         self.outings_table.itemSelectionChanged.connect(self.refresh_assignments)
+        self.members_table.itemDoubleClicked.connect(lambda _: self.edit_member())
+        self.facilities_table.itemDoubleClicked.connect(lambda _: self.edit_facility())
+        self.courses_table.itemDoubleClicked.connect(lambda _: self.edit_course())
+        self.outings_table.itemDoubleClicked.connect(lambda _: self.edit_outing())
 
         # Central layout
         container = QWidget()
@@ -286,6 +296,11 @@ class MainWindow(QMainWindow):
 
         table.resizeColumnsToContents()
 
+    def _configure_table(self, table):
+        table.setSelectionBehavior(SelectionBehavior.SelectRows)
+        table.setSelectionMode(SelectionMode.SingleSelection)
+        table.setSortingEnabled(False)
+
     def selected_row_id(self, table):
         row = table.currentRow()
         if row < 0:
@@ -308,6 +323,7 @@ class MainWindow(QMainWindow):
     def load_members(self):
         rows = self.member_service.list_members(active_only=False)
 
+        self.members_table.setSortingEnabled(False)
         self.members_table.clear()
         self.members_table.setRowCount(0)
         self.members_table.setColumnCount(9)
@@ -377,11 +393,13 @@ class MainWindow(QMainWindow):
             self.members_table.setItem(row_idx, 8, notes_item)
 
         self.members_table.resizeColumnsToContents()
+        self.members_table.setSortingEnabled(True)
         self.members_table.horizontalHeader().setStretchLastSection(True)
 
     def load_courses(self):
         rows = self.course_service.list_courses()
 
+        self.courses_table.setSortingEnabled(False)
         self.courses_table.clear()
         self.courses_table.setRowCount(0)
         self.courses_table.setColumnCount(8)
@@ -443,11 +461,13 @@ class MainWindow(QMainWindow):
             self.courses_table.setItem(row_idx, 7, preferred_format_item)
 
         self.courses_table.resizeColumnsToContents()
+        self.courses_table.setSortingEnabled(True)
         self.courses_table.horizontalHeader().setStretchLastSection(True)
 
     def load_outings(self):
         outings = self.outing_service.list_outings()
 
+        self.outings_table.setSortingEnabled(False)
         self.outings_table.clear()
         self.outings_table.setRowCount(0)
         self.outings_table.setColumnCount(5)
@@ -512,6 +532,7 @@ class MainWindow(QMainWindow):
 
         self._resize_outings_table_columns()
         QTimer.singleShot(0, self._resize_outings_table_columns)
+        self.outings_table.setSortingEnabled(True)
 
     def refresh_assignments(self):
         outing_id = self.selected_row_id(self.outings_table)
@@ -660,6 +681,7 @@ class MainWindow(QMainWindow):
     def load_facilities(self):
         rows = self.facility_service.list_facilities(active_only=False)
 
+        self.facilities_table.setSortingEnabled(False)
         self.facilities_table.clear()
         self.facilities_table.setRowCount(0)
         self.facilities_table.setColumnCount(6)
@@ -687,6 +709,7 @@ class MainWindow(QMainWindow):
                 self.facilities_table.setItem(row_idx, col_idx, item)
 
         self.facilities_table.resizeColumnsToContents()
+        self.facilities_table.setSortingEnabled(True)
         self.facilities_table.horizontalHeader().setStretchLastSection(True)
 
     def add_facility(self):

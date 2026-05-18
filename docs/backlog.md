@@ -653,3 +653,17 @@ When a member clicks an RSVP YES link after a schedule has already been generate
 - [ ] Add filtering/search controls to list views
 - [ ] Allow filtering Courses by Facility
 - [ ] Preserve selected row after refresh where possible
+
+---
+
+### Table Usability Enhancements
+
+- [ ] Add facility-aware filtering to Courses list
+- [ ] Persist table sorting state between refreshes
+- [ ] Add search/filter controls to major list views:
+  - Members
+  - Facilities
+  - Courses
+  - Outings
+  - Guests
+
