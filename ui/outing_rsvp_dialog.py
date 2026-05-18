@@ -717,15 +717,44 @@ class OutingRSVPDialog(QDialog):
         sent_at = str(sent_at or "").strip()
 
         if not status:
-            return "Missing"
+            return self._format_health_status("warning", "Not Prepared")
 
         if status == "sent":
             if sent_at:
                 formatted_sent_at = self._format_datetime_mmddyyyy_ampm(sent_at)
-                return f"Sent ({formatted_sent_at})"
-            return "Sent"
+                return self._format_health_status(
+                    "good",
+                    f"Sent ({formatted_sent_at})",
+                )
+            return self._format_health_status("good", "Sent")
 
-        return "Draft"
+        return self._format_health_status("warning", "Draft Ready")
+
+    # Deprecated. Leave it for now to show what colors the icons are in the
+    # _format_health_status method
+    def _status_icon(self, level: str) -> str:
+        icons = {
+            "good": "🟢",
+            "warning": "🟡",
+            "bad": "🔴",
+            "neutral": "🔵",
+        }
+        return icons.get(level, "🔵")
+
+    def _format_health_status(self, level: str, text: str) -> str:
+        colors = {
+            "good": "#2ecc71",
+            "warning": "#f1c40f",
+            "bad": "#e74c3c",
+            "neutral": "#3498db",
+        }
+
+        color = colors.get(level, colors["neutral"])
+
+        return (
+            f'<span style="color:{color}; font-weight:700;">●</span> '
+            f"<span>{text}</span>"
+        )
 
     def _format_datetime_mmddyyyy_ampm(self, value: str) -> str:
         raw = str(value or "").strip()
@@ -743,7 +772,10 @@ class OutingRSVPDialog(QDialog):
         outing_date_raw = str(snapshot.get("outing_date", "")).strip()
         outing_date = self._format_mmddyyyy(outing_date_raw)
         has_assignments = bool(snapshot.get("schedule_generated", False))
-        schedule_status = "Generated" if has_assignments else "Not Generated"
+        if has_assignments:
+            schedule_status = self._format_health_status("good", "Generated")
+        else:
+            schedule_status = self._format_health_status("warning", "Not Generated")
         recommended_template = (
             str(snapshot.get("recommended_member_template", "")).strip() or "--"
         )
@@ -804,9 +836,16 @@ class OutingRSVPDialog(QDialog):
             )
         )
 
-        self.revised_needed_status_value_label.setText(
-            "Yes" if bool(snapshot.get("schedule_revision_detected", False)) else "No"
-        )
+        revision_needed = bool(snapshot.get("schedule_revision_detected", False))
+
+        if revision_needed:
+            self.revised_needed_status_value_label.setText(
+                self._format_health_status("bad", "Yes — Send Revised Pairings")
+            )
+        else:
+            self.revised_needed_status_value_label.setText(
+                self._format_health_status("good", "No")
+            )
 
     def open_draft_editor(self):
         try:
