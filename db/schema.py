@@ -278,7 +278,8 @@ CREATE TABLE IF NOT EXISTS course_fee_schedules (
 
 CREATE TABLE IF NOT EXISTS course_contacts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    course_id INTEGER NOT NULL,
+    facility_id INTEGER,
+    course_id INTEGER,
 
     first_name TEXT NOT NULL,
     last_name TEXT NOT NULL,
@@ -297,6 +298,7 @@ CREATE TABLE IF NOT EXISTS course_contacts (
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
 
+    FOREIGN KEY (facility_id) REFERENCES facilities(id) ON DELETE CASCADE,
     FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
 );
 
@@ -321,6 +323,100 @@ def create_schema(db: Database) -> None:
         course_columns = {
             row["name"] for row in conn.execute("PRAGMA table_info(courses)").fetchall()
         }
+
+        contact_columns = {
+            row["name"]
+            for row in conn.execute("PRAGMA table_info(course_contacts)").fetchall()
+        }
+
+        # TEMPORARY MIGRATION:
+        # Early versions of course_contacts required course_id NOT NULL.
+        # We are transitioning to facility-based contact ownership,
+        # so course_id must now allow NULL values.
+        #
+        # This migration rebuilds the table with the updated constraint.
+        #
+        # REMOVE THIS BLOCK after all active development databases
+        # have been migrated successfully.
+        contact_info = conn.execute("PRAGMA table_info(course_contacts)").fetchall()
+
+        course_id_column = next(
+            row for row in contact_info if row["name"] == "course_id"
+        )
+
+        if int(course_id_column["notnull"]) == 1:
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS course_contacts_new (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    facility_id INTEGER,
+                    course_id INTEGER,
+
+                    first_name TEXT NOT NULL,
+                    last_name TEXT NOT NULL,
+
+                    title TEXT,
+                    email TEXT,
+                    phone TEXT,
+
+                    notes TEXT,
+
+                    active INTEGER NOT NULL DEFAULT 1,
+
+                    receives_hold_requests INTEGER NOT NULL DEFAULT 1,
+                    receives_final_schedule INTEGER NOT NULL DEFAULT 1,
+
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+
+                    FOREIGN KEY (facility_id) REFERENCES facilities(id) ON DELETE CASCADE,
+                    FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
+                )
+            """)
+
+            conn.execute("""
+                INSERT INTO course_contacts_new (
+                    id,
+                    facility_id,
+                    course_id,
+                    first_name,
+                    last_name,
+                    title,
+                    email,
+                    phone,
+                    notes,
+                    active,
+                    receives_hold_requests,
+                    receives_final_schedule,
+                    created_at,
+                    updated_at
+                )
+                SELECT
+                    id,
+                    facility_id,
+                    course_id,
+                    first_name,
+                    last_name,
+                    title,
+                    email,
+                    phone,
+                    notes,
+                    active,
+                    receives_hold_requests,
+                    receives_final_schedule,
+                    created_at,
+                    updated_at
+                FROM course_contacts
+            """)
+
+            conn.execute("DROP TABLE course_contacts")
+            conn.execute("ALTER TABLE course_contacts_new RENAME TO course_contacts")
+            # End of temp block
+
+        if "facility_id" not in contact_columns:
+            conn.execute("""
+                ALTER TABLE course_contacts
+                ADD COLUMN facility_id INTEGER
+                """)
 
         if "facility_id" not in course_columns:
             conn.execute("""

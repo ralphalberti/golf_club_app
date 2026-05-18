@@ -13,6 +13,7 @@ from repositories.reporting_repository import ReportingRepository
 from services.auth_service import AuthService
 from services.member_service import MemberService
 from services.course_service import CourseService
+from services.facility_service import FacilityService
 from services.outing_service import OutingService
 from services.reporting_service import ReportingService
 from services.scheduling_service import SchedulingService
@@ -48,6 +49,7 @@ def bootstrap_and_run() -> None:
 
     course_service = CourseService(db)
     course_contact_service = CourseContactService(db)
+    facility_service = FacilityService(db)
     outing_service = OutingService(db)
     reporting_service = ReportingService(db)
     scheduling_service = SchedulingService(db)
@@ -81,6 +83,7 @@ def bootstrap_and_run() -> None:
         member_service=member_service,
         course_service=course_service,
         course_contact_service=course_contact_service,
+        facility_service=facility_service,
         outing_service=outing_service,
         reporting_service=reporting_service,
         scheduling_service=scheduling_service,

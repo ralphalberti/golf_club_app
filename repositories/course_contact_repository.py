@@ -19,6 +19,22 @@ class CourseContactRepository(BaseRepository):
 
             return conn.execute(sql, params).fetchall()
 
+    def list_for_facility(self, facility_id: int, active_only: bool = False):
+        with self.db.get_conn() as conn:
+            sql = """
+                SELECT *
+                FROM course_contacts
+                WHERE facility_id = ?
+            """
+            params: list = [facility_id]
+
+            if active_only:
+                sql += " AND active = 1"
+
+            sql += " ORDER BY last_name, first_name"
+
+            return conn.execute(sql, params).fetchall()
+
     def get(self, contact_id: int):
         with self.db.get_conn() as conn:
             return conn.execute(
@@ -37,6 +53,7 @@ class CourseContactRepository(BaseRepository):
             cur = conn.execute(
                 """
                 INSERT INTO course_contacts (
+                    facility_id,
                     course_id,
                     first_name,
                     last_name,
@@ -50,10 +67,12 @@ class CourseContactRepository(BaseRepository):
                     created_at,
                     updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
-                    int(data["course_id"]),
+                    # int(data["course_id"]),
+                    data.get("facility_id"),
+                    data.get("course_id"),
                     data["first_name"].strip(),
                     data["last_name"].strip(),
                     data.get("title", "").strip(),
@@ -76,7 +95,9 @@ class CourseContactRepository(BaseRepository):
             conn.execute(
                 """
                 UPDATE course_contacts
-                SET first_name = ?,
+                SET facility_id = ?,
+                    course_id = ?,
+                    first_name = ?,
                     last_name = ?,
                     title = ?,
                     email = ?,
@@ -89,6 +110,8 @@ class CourseContactRepository(BaseRepository):
                 WHERE id = ?
                 """,
                 (
+                    data.get("facility_id"),
+                    data.get("course_id"),
                     data["first_name"].strip(),
                     data["last_name"].strip(),
                     data.get("title", "").strip(),

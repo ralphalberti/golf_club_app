@@ -639,3 +639,17 @@ When a member clicks an RSVP YES link after a schedule has already been generate
   - members can attach existing guests to an outing signup
   - members can add a new guest during outing signup
   - admin can review/edit guest records
+
+---
+
+### List View Sorting and Filtering
+
+- [ ] Add sorting to major list views:
+  - Facilities
+  - Courses
+  - Members
+  - Outings
+  - Guests
+- [ ] Add filtering/search controls to list views
+- [ ] Allow filtering Courses by Facility
+- [ ] Preserve selected row after refresh where possible

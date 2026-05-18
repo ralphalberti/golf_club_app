@@ -1,21 +1,45 @@
 from repositories.base_repository import BaseRepository
 
+
 class CourseRepository(BaseRepository):
     def list_all(self):
         with self.db.get_conn() as conn:
-            return conn.execute("SELECT * FROM courses ORDER BY name").fetchall()
+            return conn.execute("""
+                SELECT
+                    courses.*,
+                    facilities.name AS facility_name
+                FROM courses
+                LEFT JOIN facilities
+                    ON facilities.id = courses.facility_id
+                ORDER BY
+                    facilities.name,
+                    courses.name
+            """).fetchall()
 
     def create(self, data: dict) -> int:
         with self.db.get_conn() as conn:
             cur = conn.execute(
                 """
-                INSERT INTO courses (name, address, active, notes, contact_name, contact_email, preferred_format)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO courses (
+                    facility_id,
+                    name,
+                    address,
+                    active,
+                    notes,
+                    contact_name,
+                    contact_email,
+                    preferred_format
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
-                    data["name"], data.get("address", ""), data.get("active", 1),
-                    data.get("notes", ""), data.get("contact_name", ""),
-                    data.get("contact_email", ""), data.get("preferred_format", "both"),
+                    data["name"],
+                    data.get("address", ""),
+                    data.get("active", 1),
+                    data.get("notes", ""),
+                    data.get("contact_name", ""),
+                    data.get("contact_email", ""),
+                    data.get("preferred_format", "both"),
                 ),
             )
             return cur.lastrowid
@@ -25,13 +49,19 @@ class CourseRepository(BaseRepository):
             conn.execute(
                 """
                 UPDATE courses
-                SET name=?, address=?, active=?, notes=?, contact_name=?, contact_email=?, preferred_format=?
+                SET facility_id=?, name=?, address=?, active=?, notes=?, contact_name=?, contact_email=?, preferred_format=?
                 WHERE id=?
                 """,
                 (
-                    data["name"], data.get("address", ""), data.get("active", 1),
-                    data.get("notes", ""), data.get("contact_name", ""),
-                    data.get("contact_email", ""), data.get("preferred_format", "both"), course_id,
+                    data.get("facility_id"),
+                    data["name"],
+                    data.get("address", ""),
+                    data.get("active", 1),
+                    data.get("notes", ""),
+                    data.get("contact_name", ""),
+                    data.get("contact_email", ""),
+                    data.get("preferred_format", "both"),
+                    course_id,
                 ),
             )
 
@@ -41,4 +71,6 @@ class CourseRepository(BaseRepository):
 
     def get(self, course_id: int):
         with self.db.get_conn() as conn:
-            return conn.execute("SELECT * FROM courses WHERE id=?", (course_id,)).fetchone()
+            return conn.execute(
+                "SELECT * FROM courses WHERE id=?", (course_id,)
+            ).fetchone()

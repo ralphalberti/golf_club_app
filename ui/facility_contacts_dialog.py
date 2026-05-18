@@ -9,18 +9,18 @@ from PyQt5.QtWidgets import (
     QVBoxLayout,
 )
 
-from ui.course_contact_dialog import CourseContactDialog
+from ui.facility_contact_dialog import FacilityContactDialog
 from ui.shared.messages import show_error, show_info, show_warning
 
 
-class CourseContactsDialog(QDialog):
+class FacilityContactsDialog(QDialog):
     def __init__(self, *, course, contact_service, parent=None):
         super().__init__(parent)
 
         self.course = course
         self.contact_service = contact_service
 
-        self.setWindowTitle(f"Course Contacts - {course['name']}")
+        self.setWindowTitle(f"Facility Contacts - {course['name']}")
         self.resize(900, 500)
 
         self._build_ui()
@@ -51,7 +51,7 @@ class CourseContactsDialog(QDialog):
         self.setLayout(layout)
 
     def load_contacts(self):
-        rows = self.contact_service.list_for_course(
+        rows = self.contact_service.list_for_facility(
             int(self.course["id"]),
             active_only=False,
         )
@@ -109,11 +109,12 @@ class CourseContactsDialog(QDialog):
         return item.data(Qt.UserRole)
 
     def add_contact(self):
-        dlg = CourseContactDialog(parent=self)
+        dlg = FacilityContactDialog(parent=self)
 
         if dlg.exec_():
             values = dlg.values()
-            values["course_id"] = int(self.course["id"])
+            values["facility_id"] = int(self.course["id"])
+            values["course_id"] = None
 
             self.contact_service.create_contact(values)
             self.load_contacts()
@@ -128,11 +129,12 @@ class CourseContactsDialog(QDialog):
             return
 
         contact = self.contact_service.get_contact(contact_id)
-        dlg = CourseContactDialog(contact, self)
+        dlg = FacilityContactDialog(contact, self)
 
         if dlg.exec_():
             values = dlg.values()
-            values["course_id"] = int(self.course["id"])
+            values["facility_id"] = int(self.course["id"])
+            values["course_id"] = None
 
             self.contact_service.update_contact(contact_id, values)
             self.load_contacts()

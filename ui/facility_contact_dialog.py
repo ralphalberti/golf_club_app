@@ -15,7 +15,7 @@ from PyQt5.QtWidgets import (
 from ui.shared.messages import show_error
 
 
-class CourseContactDialog(QDialog):
+class FacilityContactDialog(QDialog):
     def __init__(self, contact=None, parent=None):
         super().__init__(parent)
 

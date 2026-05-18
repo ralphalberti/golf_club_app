@@ -14,16 +14,20 @@ from PyQt5.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-
 from app.config import APP_NAME
 from app.constants import APP_VERSION
 from ui.schedule_editor_dialog import ScheduleEditorDialog
 from ui.settings_dialog import SettingsDialog
-from ui.shared.forms import MemberFormDialog, CourseFormDialog, OutingFormDialog
 from ui.outing_rsvp_dialog import OutingRSVPDialog
 from ui.email_draft_dialog import EmailDraftDialog
 from ui.shared.messages import show_error, show_info, show_warning
-from ui.course_contacts_dialog import CourseContactsDialog
+from ui.facility_contacts_dialog import FacilityContactsDialog
+from ui.shared.forms import (
+    MemberFormDialog,
+    FacilityFormDialog,
+    CourseFormDialog,
+    OutingFormDialog,
+)
 
 Align = Qt.AlignmentFlag
 DataRole = Qt.ItemDataRole
@@ -39,6 +43,7 @@ class MainWindow(QMainWindow):
         member_service,
         course_service,
         course_contact_service,
+        facility_service,
         outing_service,
         reporting_service,
         scheduling_service,
@@ -56,6 +61,7 @@ class MainWindow(QMainWindow):
         self.member_service = member_service
         self.course_service = course_service
         self.course_contact_service = course_contact_service
+        self.facility_service = facility_service
         self.outing_service = outing_service
         self.reporting_service = reporting_service
         self.scheduling_service = scheduling_service
@@ -73,6 +79,7 @@ class MainWindow(QMainWindow):
         # Core widgets
         self.tabs = QTabWidget()
         self.members_table = QTableWidget()
+        self.facilities_table = QTableWidget()
         self.courses_table = QTableWidget()
         self.outings_table = QTableWidget()
         self.assignments_table = QTableWidget()
@@ -80,6 +87,9 @@ class MainWindow(QMainWindow):
         # Table behavior
         self.members_table.setSelectionBehavior(SelectionBehavior.SelectRows)
         self.members_table.setSelectionMode(SelectionMode.SingleSelection)
+
+        self.facilities_table.setSelectionBehavior(SelectionBehavior.SelectRows)
+        self.facilities_table.setSelectionMode(SelectionMode.SingleSelection)
 
         self.courses_table.setSelectionBehavior(SelectionBehavior.SelectRows)
         self.courses_table.setSelectionMode(SelectionMode.SingleSelection)
@@ -92,6 +102,7 @@ class MainWindow(QMainWindow):
 
         # Tabs
         self.tabs.addTab(self._build_members_tab(), "Members")
+        self.tabs.addTab(self._build_facilities_tab(), "Facilities")
         self.tabs.addTab(self._build_courses_tab(), "Courses")
         self.tabs.addTab(self._build_outings_tab(), "Outings")
 
@@ -161,6 +172,31 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.members_table)
         return widget
 
+    def _build_facilities_tab(self):
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        buttons = QHBoxLayout()
+
+        add_btn = QPushButton("Add Facility")
+        edit_btn = QPushButton("Edit Facility")
+        delete_btn = QPushButton("Delete Facility")
+        contacts_btn = QPushButton("Facility Contacts")
+
+        add_btn.clicked.connect(self.add_facility)
+        edit_btn.clicked.connect(self.edit_facility)
+        delete_btn.clicked.connect(self.delete_facility)
+        contacts_btn.clicked.connect(self.manage_facility_contacts)
+
+        buttons.addWidget(add_btn)
+        buttons.addWidget(edit_btn)
+        buttons.addWidget(delete_btn)
+        buttons.addWidget(contacts_btn)
+        buttons.addStretch()
+
+        layout.addLayout(buttons)
+        layout.addWidget(self.facilities_table)
+        return widget
+
     def _build_courses_tab(self):
         widget = QWidget()
         layout = QVBoxLayout(widget)
@@ -169,17 +205,14 @@ class MainWindow(QMainWindow):
         add_btn = QPushButton("Add Course")
         edit_btn = QPushButton("Edit Course")
         delete_btn = QPushButton("Delete Course")
-        contacts_btn = QPushButton("Course Contacts")
 
         add_btn.clicked.connect(self.add_course)
         edit_btn.clicked.connect(self.edit_course)
         delete_btn.clicked.connect(self.delete_course)
-        contacts_btn.clicked.connect(self.manage_course_contacts)
 
         buttons.addWidget(add_btn)
         buttons.addWidget(edit_btn)
         buttons.addWidget(delete_btn)
-        buttons.addWidget(contacts_btn)
         buttons.addStretch()
 
         layout.addLayout(buttons)
@@ -226,6 +259,7 @@ class MainWindow(QMainWindow):
 
     def refresh_all(self):
         self.load_members()
+        self.load_facilities()
         self.load_courses()
         self.load_outings()
         self.refresh_assignments()
@@ -350,9 +384,10 @@ class MainWindow(QMainWindow):
 
         self.courses_table.clear()
         self.courses_table.setRowCount(0)
-        self.courses_table.setColumnCount(7)
+        self.courses_table.setColumnCount(8)
         self.courses_table.setHorizontalHeaderLabels(
             [
+                "Facility",
                 "Course",
                 "Address",
                 "Active",
@@ -365,6 +400,10 @@ class MainWindow(QMainWindow):
 
         for row_idx, row in enumerate(rows):
             self.courses_table.insertRow(row_idx)
+
+            facility_item = QTableWidgetItem(str(row["facility_name"] or ""))
+            facility_item.setData(DataRole.UserRole, row["id"])
+            facility_item.setTextAlignment(Align.AlignVCenter | Align.AlignLeft)
 
             course_item = QTableWidgetItem(str(row["name"] or ""))
             course_item.setData(DataRole.UserRole, row["id"])
@@ -394,13 +433,14 @@ class MainWindow(QMainWindow):
             preferred_format_item = QTableWidgetItem(str(row["preferred_format"] or ""))
             preferred_format_item.setTextAlignment(Align.AlignCenter)
 
-            self.courses_table.setItem(row_idx, 0, course_item)
-            self.courses_table.setItem(row_idx, 1, address_item)
-            self.courses_table.setItem(row_idx, 2, active_item)
-            self.courses_table.setItem(row_idx, 3, notes_item)
-            self.courses_table.setItem(row_idx, 4, contact_name_item)
-            self.courses_table.setItem(row_idx, 5, contact_email_item)
-            self.courses_table.setItem(row_idx, 6, preferred_format_item)
+            self.courses_table.setItem(row_idx, 0, facility_item)
+            self.courses_table.setItem(row_idx, 1, course_item)
+            self.courses_table.setItem(row_idx, 2, address_item)
+            self.courses_table.setItem(row_idx, 3, active_item)
+            self.courses_table.setItem(row_idx, 4, notes_item)
+            self.courses_table.setItem(row_idx, 5, contact_name_item)
+            self.courses_table.setItem(row_idx, 6, contact_email_item)
+            self.courses_table.setItem(row_idx, 7, preferred_format_item)
 
         self.courses_table.resizeColumnsToContents()
         self.courses_table.horizontalHeader().setStretchLastSection(True)
@@ -555,7 +595,10 @@ class MainWindow(QMainWindow):
                 )
 
     def add_course(self):
-        dlg = CourseFormDialog()
+        facilities = self.facility_service.list_facilities(active_only=True)
+
+        dlg = CourseFormDialog(facilities)
+
         if dlg.exec_():
             course_id = self.course_service.create_course(dlg.values())
             self.load_courses()
@@ -563,16 +606,29 @@ class MainWindow(QMainWindow):
 
     def edit_course(self):
         course_id = self.selected_row_id(self.courses_table)
+
         if not course_id:
-            show_warning(self, "No selection", "Select a course first.")
+            show_warning(self, "No Selection", "Select a course first.")
             return
 
         course = self.course_service.get_course(course_id)
-        dlg = CourseFormDialog(course)
+
+        if not course:
+            show_warning(
+                self,
+                "Course Not Found",
+                "Could not load the selected course.",
+            )
+            return
+
+        facilities = self.facility_service.list_facilities(active_only=True)
+
+        dlg = CourseFormDialog(facilities, course)
 
         if dlg.exec_():
             self.course_service.update_course(course_id, dlg.values())
             self.load_courses()
+            self.select_course_row_by_id(course_id)
 
     def delete_course(self):
         course_id = self.selected_row_id(self.courses_table)
@@ -601,6 +657,115 @@ class MainWindow(QMainWindow):
                 f"Could not delete course.\n\n{exc}",
             )
 
+    def load_facilities(self):
+        rows = self.facility_service.list_facilities(active_only=False)
+
+        self.facilities_table.clear()
+        self.facilities_table.setRowCount(0)
+        self.facilities_table.setColumnCount(6)
+        self.facilities_table.setHorizontalHeaderLabels(
+            ["Facility", "Address", "Phone", "Website", "Active", "Notes"]
+        )
+
+        for row_idx, row in enumerate(rows):
+            self.facilities_table.insertRow(row_idx)
+
+            facility_item = QTableWidgetItem(str(row["name"] or ""))
+            facility_item.setData(DataRole.UserRole, row["id"])
+            facility_item.setTextAlignment(Align.AlignVCenter | Align.AlignLeft)
+
+            values = [
+                facility_item,
+                QTableWidgetItem(str(row["address"] or "")),
+                QTableWidgetItem(str(row["phone"] or "")),
+                QTableWidgetItem(str(row["website"] or "")),
+                QTableWidgetItem("Yes" if int(row["active"]) == 1 else "No"),
+                QTableWidgetItem(str(row["notes"] or "")),
+            ]
+
+            for col_idx, item in enumerate(values):
+                self.facilities_table.setItem(row_idx, col_idx, item)
+
+        self.facilities_table.resizeColumnsToContents()
+        self.facilities_table.horizontalHeader().setStretchLastSection(True)
+
+    def add_facility(self):
+        dlg = FacilityFormDialog()
+
+        if dlg.exec_():
+            facility_id = self.facility_service.create_facility(dlg.values())
+            self.load_facilities()
+            self.select_facility_row_by_id(facility_id)
+
+    def edit_facility(self):
+        facility_id = self.selected_row_id(self.facilities_table)
+
+        if not facility_id:
+            show_warning(self, "No Selection", "Select a facility first.")
+            return
+
+        facility = self.facility_service.get_facility(facility_id)
+        dlg = FacilityFormDialog(facility)
+
+        if dlg.exec_():
+            self.facility_service.update_facility(facility_id, dlg.values())
+            self.load_facilities()
+            self.select_facility_row_by_id(facility_id)
+
+    def delete_facility(self):
+        facility_id = self.selected_row_id(self.facilities_table)
+
+        if not facility_id:
+            show_warning(self, "No Selection", "Select a facility first.")
+            return
+
+        confirm = QMessageBox.question(
+            self,
+            "Delete Facility",
+            "Are you sure you want to delete this facility?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+
+        if confirm != QMessageBox.Yes:
+            return
+
+        try:
+            self.facility_service.delete_facility(facility_id)
+            self.load_facilities()
+            show_info(self, "Facility Deleted", "Facility deleted successfully.")
+        except Exception as exc:
+            show_error(
+                self,
+                "Delete Failed",
+                f"Could not delete facility.\n\n{exc}",
+            )
+
+    def manage_facility_contacts(self):
+        facility_id = self.selected_row_id(self.facilities_table)
+
+        if not facility_id:
+            show_warning(self, "No Selection", "Select a facility first.")
+            return
+
+        facility = self.facility_service.get_facility(facility_id)
+
+        if not facility:
+            show_warning(
+                self,
+                "Facility Not Found",
+                "Could not load the selected facility.",
+            )
+            return
+
+        dlg = FacilityContactsDialog(
+            course=facility,
+            contact_service=self.course_contact_service,
+            parent=self,
+        )
+        dlg.exec_()
+
+    # Can remove later. Deprecated
     def manage_course_contacts(self):
         course_id = self.selected_row_id(self.courses_table)
 
@@ -618,7 +783,7 @@ class MainWindow(QMainWindow):
             )
             return
 
-        dlg = CourseContactsDialog(
+        dlg = FacilityContactsDialog(
             course=course,
             contact_service=self.course_contact_service,
             parent=self,
@@ -914,6 +1079,22 @@ class MainWindow(QMainWindow):
                 self.members_table.selectRow(row)
                 self.members_table.setCurrentCell(row, 0)
                 self.members_table.scrollToItem(
+                    item,
+                    QTableWidget.ScrollHint.PositionAtCenter,
+                )
+                return
+
+    def select_facility_row_by_id(self, facility_id: int):
+        for row in range(self.facilities_table.rowCount()):
+            item = self.facilities_table.item(row, 0)
+            if not item:
+                continue
+
+            hidden_id = item.data(DataRole.UserRole)
+            if hidden_id is not None and int(hidden_id) == int(facility_id):
+                self.facilities_table.selectRow(row)
+                self.facilities_table.setCurrentCell(row, 0)
+                self.facilities_table.scrollToItem(
                     item,
                     QTableWidget.ScrollHint.PositionAtCenter,
                 )

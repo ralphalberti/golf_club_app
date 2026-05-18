@@ -8,6 +8,12 @@ class CourseContactService:
     def list_for_course(self, course_id: int, active_only: bool = False):
         return self.repo.list_for_course(course_id, active_only=active_only)
 
+    def list_for_facility(self, facility_id: int, active_only: bool = False):
+        return self.repo.list_for_facility(
+            facility_id,
+            active_only=active_only,
+        )
+
     def get_contact(self, contact_id: int):
         return self.repo.get(contact_id)
 
@@ -29,5 +35,8 @@ class CourseContactService:
         if not str(data.get("last_name", "")).strip():
             raise ValueError("Last name is required.")
 
-        if not int(data.get("course_id", 0)):
-            raise ValueError("Course is required.")
+        facility_id = data.get("facility_id")
+        course_id = data.get("course_id")
+
+        if not facility_id and not course_id:
+            raise ValueError("Facility or course association is required.")

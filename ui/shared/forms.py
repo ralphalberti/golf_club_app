@@ -160,10 +160,69 @@ class GuestFormDialog(QDialog):
         }
 
 
+class FacilityFormDialog(QDialog):
+    def __init__(self, facility=None):
+        super().__init__()
+        self.setWindowTitle("Facility")
+
+        self.name = QLineEdit(facility["name"] if facility else "")
+        self.address = QLineEdit(facility["address"] if facility else "")
+        self.phone = QLineEdit(facility["phone"] if facility else "")
+        self.website = QLineEdit(facility["website"] if facility else "")
+        self.notes = QTextEdit(facility["notes"] if facility else "")
+
+        self.active = QCheckBox()
+        self.active.setChecked(True if not facility else bool(facility["active"]))
+
+        form = QFormLayout(self)
+        form.addRow("Name *", self.name)
+        form.addRow("Address", self.address)
+        form.addRow("Phone", self.phone)
+        form.addRow("Website", self.website)
+        form.addRow("Active", self.active)
+        form.addRow("Notes", self.notes)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        form.addRow(buttons)
+
+    def accept(self):
+        name = self.name.text().strip()
+
+        if not name:
+            show_warning(
+                self,
+                "Missing Required Fields",
+                "Facility name is required.",
+            )
+            return
+
+        super().accept()
+
+    def values(self):
+        return {
+            "name": self.name.text().strip(),
+            "address": self.address.text().strip(),
+            "phone": self.phone.text().strip(),
+            "website": self.website.text().strip(),
+            "active": 1 if self.active.isChecked() else 0,
+            "notes": self.notes.toPlainText().strip(),
+        }
+
+
 class CourseFormDialog(QDialog):
-    def __init__(self, course=None):
+    def __init__(self, facilities, course=None):
         super().__init__()
         self.setWindowTitle("Course")
+        self.facility = QComboBox()
+        self.facility.addItem("", None)
+
+        for facility in facilities:
+            self.facility.addItem(
+                facility["name"],
+                facility["id"],
+            )
         self.name = QLineEdit(course["name"] if course else "")
         self.address = QLineEdit(course["address"] if course else "")
         self.contact_name = QLineEdit(course["contact_name"] if course else "")
@@ -172,11 +231,15 @@ class CourseFormDialog(QDialog):
         self.preferred_format = QComboBox()
         self.preferred_format.addItems(["both", "pdf", "csv"])
         if course:
+            facility_idx = self.facility.findData(course["facility_id"])
+            if facility_idx >= 0:
+                self.facility.setCurrentIndex(facility_idx)
             idx = self.preferred_format.findText(course["preferred_format"])
             if idx >= 0:
                 self.preferred_format.setCurrentIndex(idx)
 
         form = QFormLayout(self)
+        form.addRow("Facility", self.facility)
         form.addRow("Name", self.name)
         form.addRow("Address", self.address)
         form.addRow("Course contact", self.contact_name)
@@ -191,6 +254,7 @@ class CourseFormDialog(QDialog):
 
     def values(self):
         return {
+            "facility_id": self.facility.currentData(),
             "name": self.name.text().strip(),
             "address": self.address.text().strip(),
             "contact_name": self.contact_name.text().strip(),
