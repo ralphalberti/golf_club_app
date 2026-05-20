@@ -7,6 +7,7 @@ from PyQt5.QtWidgets import (
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
+    QAbstractItemView,
 )
 
 from ui.facility_contact_dialog import FacilityContactDialog
@@ -44,6 +45,11 @@ class FacilityContactsDialog(QDialog):
         buttons.addStretch()
 
         self.table = QTableWidget()
+
+        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.table.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.table.setSortingEnabled(False)
+        self.table.itemDoubleClicked.connect(lambda _: self.edit_contact())
 
         layout.addLayout(buttons)
         layout.addWidget(self.table)
@@ -96,6 +102,7 @@ class FacilityContactsDialog(QDialog):
 
         self.table.resizeColumnsToContents()
         self.table.horizontalHeader().setStretchLastSection(True)
+        self.table.setSortingEnabled(True)
 
     def selected_contact_id(self):
         row = self.table.currentRow()

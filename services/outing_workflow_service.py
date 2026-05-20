@@ -43,6 +43,7 @@ class OutingWorkflowService:
     VALID_COURSE_TEMPLATE_TYPES = {
         "course_hold_request",
         "course_final_schedule",
+        "course_revised_schedule",
     }
 
     def __init__(self, db):
@@ -90,6 +91,10 @@ class OutingWorkflowService:
             outing_id,
             "course_final_schedule",
         )
+        course_revised_draft = self._get_course_draft(
+            outing_id,
+            "course_revised_schedule",
+        )
 
         recommended_member_template = self.get_recommended_member_template(outing_id)
         recommended_course_template = self.get_recommended_course_template(outing_id)
@@ -123,11 +128,13 @@ class OutingWorkflowService:
             "revised_pairings_draft_status": self._draft_status(revised_pairings_draft),
             "course_hold_draft_status": self._draft_status(course_hold_draft),
             "course_final_draft_status": self._draft_status(course_final_draft),
+            "course_revised_draft_status": self._draft_status(course_revised_draft),
             "invitation_sent_at": self._draft_sent_at(invitation_draft),
             "pairings_sent_at": self._draft_sent_at(pairings_draft),
             "revised_pairings_sent_at": self._draft_sent_at(revised_pairings_draft),
             "course_hold_sent_at": self._draft_sent_at(course_hold_draft),
             "course_final_sent_at": self._draft_sent_at(course_final_draft),
+            "course_revised_sent_at": self._draft_sent_at(course_revised_draft),
         }
 
     def get_recommended_member_template(self, outing_id: int) -> str:

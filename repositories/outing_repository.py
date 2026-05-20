@@ -628,3 +628,39 @@ class OutingRepository(BaseRepository):
                 """,
                 (outing_id,),
             ).fetchall()
+
+    def get_recent_workflow_activity(self, outing_id: int, limit: int = 8):
+        with self.db.get_conn() as conn:
+            return conn.execute(
+                """
+                SELECT
+                    'email' AS activity_type,
+                    recipient_type,
+                    subject,
+                    status,
+                    COUNT(*) AS count,
+                    MAX(sent_at) AS activity_at,
+                    error_message
+                FROM email_logs
+                WHERE outing_id = ?
+                GROUP BY recipient_type, subject, status, error_message
+
+                UNION ALL
+
+                SELECT
+                    'audit' AS activity_type,
+                    entity_type AS recipient_type,
+                    action AS subject,
+                    'logged' AS status,
+                    1 AS count,
+                    created_at AS activity_at,
+                    details_json AS error_message
+                FROM audit_log
+                WHERE entity_type = 'outing'
+                  AND entity_id = ?
+
+                ORDER BY activity_at DESC
+                LIMIT ?
+                """,
+                (outing_id, outing_id, limit),
+            ).fetchall()

@@ -667,3 +667,21 @@ When a member clicks an RSVP YES link after a schedule has already been generate
   - Outings
   - Guests
 
+---
+
+### RSVP / Workflow UI Redesign
+
+- [ ] Remove or hide manual Save Stage button unless admin override mode is enabled
+- [ ] Reconsider Active Members panel in Manage RSVP dialog
+- [ ] Move recipient targeting into Draft Email Editor or Send Email flow
+- [ ] Use neutral gray status icons for initial/not-started states
+- [ ] Add explicit member vs course/facility communication actions
+- [ ] Add recipient preview before sending emails
+
+### Schedule Editor Improvements
+
+- [ ] Remove tier count summary from Edit Schedule dialog
+- [ ] Rename Active Members pane to Waitlist
+- [ ] Preserve removed scheduled players as top waitlist candidates
+- [ ] Support manual player swaps between foursomes
+- [ ] Consider drag-and-drop player swap behavior

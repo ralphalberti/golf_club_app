@@ -35,6 +35,35 @@ class CourseContactRepository(BaseRepository):
 
             return conn.execute(sql, params).fetchall()
 
+    def list_email_recipients_for_facility_template(
+        self,
+        facility_id: int,
+        template_type: str,
+    ):
+        if template_type not in {"course_hold_request", "course_final_schedule"}:
+            raise ValueError(f"Unsupported course template_type: {template_type}")
+
+        flag_column = (
+            "receives_hold_requests"
+            if template_type == "course_hold_request"
+            else "receives_final_schedule"
+        )
+
+        with self.db.get_conn() as conn:
+            return conn.execute(
+                f"""
+                SELECT *
+                FROM course_contacts
+                WHERE facility_id = ?
+                  AND active = 1
+                  AND {flag_column} = 1
+                  AND email IS NOT NULL
+                  AND TRIM(email) != ''
+                ORDER BY last_name, first_name
+                """,
+                (facility_id,),
+            ).fetchall()
+
     def get(self, contact_id: int):
         with self.db.get_conn() as conn:
             return conn.execute(

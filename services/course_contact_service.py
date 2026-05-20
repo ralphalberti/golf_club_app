@@ -40,3 +40,13 @@ class CourseContactService:
 
         if not facility_id and not course_id:
             raise ValueError("Facility or course association is required.")
+
+    def list_email_recipients_for_facility_template(
+        self,
+        facility_id: int,
+        template_type: str,
+    ):
+        return self.repo.list_email_recipients_for_facility_template(
+            facility_id,
+            template_type,
+        )

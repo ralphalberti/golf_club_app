@@ -10,6 +10,7 @@ class OutingEmailDraftRepository(BaseRepository):
         "revised_pairings",
         "course_hold_request",
         "course_final_schedule",
+        "course_revised_schedule",
     }
     VALID_STATUSES = {"draft", "sent"}
 

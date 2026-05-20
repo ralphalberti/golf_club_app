@@ -21,6 +21,7 @@ class EmailRenderService:
         "revised_pairings",
         "course_hold_request",
         "course_final_schedule",
+        "course_revised_schedule",
     }
 
     def __init__(self, db):

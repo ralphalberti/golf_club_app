@@ -22,9 +22,11 @@ from PyQt5.QtWidgets import (
     QTableWidgetItem,
     QVBoxLayout,
     QWidget,
+    QTextEdit,
 )
 from services.outing_workflow_service import OutingWorkflowService
 from ui.shared.messages import show_error, show_info, show_warning
+from ui.activity_log_dialog import ActivityLogDialog
 
 DataRole = Qt.ItemDataRole
 SelectionBehavior = QTableWidget.SelectionBehavior
@@ -196,6 +198,7 @@ class OutingRSVPDialog(QDialog):
         self.revised_pairings_draft_status_value_label = QLabel("--")
         self.course_hold_draft_status_value_label = QLabel("--")
         self.course_final_draft_status_value_label = QLabel("--")
+        self.course_revised_draft_status_value_label = QLabel("--")
         self.revised_needed_status_value_label = QLabel("--")
         self.email_delivery_summary_value_label = QLabel("--")
 
@@ -215,6 +218,7 @@ class OutingRSVPDialog(QDialog):
             self.revised_pairings_draft_status_value_label,
             self.course_hold_draft_status_value_label,
             self.course_final_draft_status_value_label,
+            self.course_revised_draft_status_value_label,
             self.revised_needed_status_value_label,
             self.email_delivery_summary_value_label,
         ):
@@ -223,6 +227,7 @@ class OutingRSVPDialog(QDialog):
         self.open_draft_editor_button = QPushButton("Open Draft Editor")
         self.generate_schedule_button = QPushButton("Generate Schedule")
         self.send_recommended_template_button = QPushButton("Send Email")
+        self.view_activity_log_button = QPushButton("View Activity Log")
 
         self.open_draft_editor_button.clicked.connect(self.open_draft_editor)
         self.generate_schedule_button.clicked.connect(self.generate_schedule_from_rsvp)
@@ -232,6 +237,7 @@ class OutingRSVPDialog(QDialog):
         self.send_recommended_template_button.clicked.connect(
             self.send_recommended_template
         )
+        self.view_activity_log_button.clicked.connect(self.open_activity_log)
 
         main_layout = QVBoxLayout(self)
 
@@ -315,6 +321,12 @@ class OutingRSVPDialog(QDialog):
         )
         right_column.addLayout(
             status_row(
+                "Course Revised Draft",
+                self.course_revised_draft_status_value_label,
+            )
+        )
+        right_column.addLayout(
+            status_row(
                 "Revised Pairings Needed", self.revised_needed_status_value_label
             )
         )
@@ -332,6 +344,7 @@ class OutingRSVPDialog(QDialog):
         communication_button_row = QHBoxLayout()
         communication_button_row.addWidget(self.open_draft_editor_button)
         communication_button_row.addWidget(self.send_recommended_template_button)
+        communication_button_row.addWidget(self.view_activity_log_button)
         # communication_button_row.addWidget(self.generate_schedule_button)
         communication_button_row.addStretch()
 
@@ -689,6 +702,7 @@ class OutingRSVPDialog(QDialog):
             self.revised_pairings_draft_status_value_label.setText("--")
             self.course_hold_draft_status_value_label.setText("--")
             self.course_final_draft_status_value_label.setText("--")
+            self.course_revised_draft_status_value_label.setText("--")
             self.revised_needed_status_value_label.setText("--")
             self.send_recommended_template_button.setEnabled(False)
             return
@@ -867,6 +881,13 @@ class OutingRSVPDialog(QDialog):
             )
         )
 
+        self.course_revised_draft_status_value_label.setText(
+            self._format_draft_status(
+                snapshot.get("course_revised_draft_status", ""),
+                snapshot.get("course_revised_sent_at", ""),
+            )
+        )
+
         revision_needed = bool(snapshot.get("schedule_revision_detected", False))
 
         if revision_needed:
@@ -879,6 +900,48 @@ class OutingRSVPDialog(QDialog):
             )
 
         self._update_email_delivery_summary_label()
+
+    def _refresh_recent_workflow_activity(self):
+        try:
+            rows = self.outing_service.get_recent_workflow_activity(
+                self.outing_id,
+                limit=8,
+            )
+        except Exception:
+            self.recent_activity_text.setPlainText("Recent activity unavailable.")
+            return
+
+        if not rows:
+            self.recent_activity_text.setPlainText("No recent workflow activity.")
+            return
+
+        lines = []
+
+        for row in rows:
+            activity_type = str(row["activity_type"] or "")
+            status = str(row["status"] or "")
+            subject = str(row["subject"] or "")
+            count = int(row["count"] or 0)
+            activity_at = self._format_datetime_mmddyyyy_ampm(
+                str(row["activity_at"] or "")
+            )
+
+            if activity_type == "email":
+                icon = "🟢" if status == "sent" else "🔴"
+                label = f"{icon} Email {status}: {count} recipient(s)"
+                detail = subject
+            else:
+                icon = "🔵"
+                label = f"{icon} Audit: {subject}"
+                detail = ""
+
+            lines.append(f"{label}")
+            if detail:
+                lines.append(f"   {detail}")
+            lines.append(f"   {activity_at}")
+            lines.append("")
+
+        self.recent_activity_text.setPlainText("\n".join(lines).strip())
 
     def _update_email_delivery_summary_label(self):
         try:
@@ -970,6 +1033,15 @@ class OutingRSVPDialog(QDialog):
 
         dialog.exec_()
         self.load_data()
+
+    def open_activity_log(self):
+        dialog = ActivityLogDialog(
+            outing_id=self.outing_id,
+            outing_service=self.outing_service,
+            formatter=self._format_datetime_mmddyyyy_ampm,
+            parent=self,
+        )
+        dialog.exec_()
 
     def update_selected_member_rsvps(self, status: str):
         member_ids = self._selected_member_rsvp_ids()

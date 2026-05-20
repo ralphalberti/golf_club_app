@@ -204,7 +204,8 @@ CREATE TABLE IF NOT EXISTS email_templates (
             'pairings',
             'revised_pairings',
             'course_hold_request',
-            'course_final_schedule'
+            'course_final_schedule',
+            'course_revised_schedule'
         )
     ),
     subject_template TEXT NOT NULL,
@@ -227,7 +228,8 @@ CREATE TABLE IF NOT EXISTS outing_email_drafts (
             'pairings',
             'revised_pairings',
             'course_hold_request',
-            'course_final_schedule'
+            'course_final_schedule',
+            'course_revised_schedule'
         )
     ),
     subject_text TEXT NOT NULL,
@@ -439,3 +441,113 @@ def create_schema(db: Database) -> None:
                 ALTER TABLE outings
                 ADD COLUMN fee REAL
                 """)
+
+        # TEMPORARY MIGRATION:
+        # Add course_revised_schedule to email_templates.template_type CHECK constraint.
+        # SQLite cannot ALTER CHECK constraints directly, so rebuild the table.
+        # REMOVE after all active development databases have migrated.
+        template_sql = conn.execute("""
+            SELECT sql
+            FROM sqlite_master
+            WHERE type = 'table'
+              AND name = 'email_templates'
+            """).fetchone()
+
+        if template_sql and "course_revised_schedule" not in str(template_sql["sql"]):
+            conn.execute("""
+                CREATE TABLE email_templates_new (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    course_id INTEGER,
+                    audience_type TEXT NOT NULL CHECK(audience_type IN ('member', 'course')),
+                    template_type TEXT NOT NULL CHECK(
+                        template_type IN (
+                            'invitation',
+                            'pairings',
+                            'revised_pairings',
+                            'course_hold_request',
+                            'course_final_schedule',
+                            'course_revised_schedule'
+                        )
+                    ),
+                    subject_template TEXT NOT NULL,
+                    body_text_template TEXT NOT NULL,
+                    body_html_template TEXT,
+                    active INTEGER NOT NULL DEFAULT 1,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    UNIQUE(course_id, audience_type, template_type),
+                    FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
+                )
+            """)
+
+            conn.execute("""
+                INSERT INTO email_templates_new (
+                    id, course_id, audience_type, template_type,
+                    subject_template, body_text_template, body_html_template,
+                    active, created_at, updated_at
+                )
+                SELECT
+                    id, course_id, audience_type, template_type,
+                    subject_template, body_text_template, body_html_template,
+                    active, created_at, updated_at
+                FROM email_templates
+            """)
+
+            conn.execute("DROP TABLE email_templates")
+            conn.execute("ALTER TABLE email_templates_new RENAME TO email_templates")
+
+        # TEMPORARY MIGRATION:
+        # Add course_revised_schedule to outing_email_drafts.template_type CHECK constraint.
+        # REMOVE after all active development databases have migrated.
+        draft_sql = conn.execute("""
+            SELECT sql
+            FROM sqlite_master
+            WHERE type = 'table'
+              AND name = 'outing_email_drafts'
+            """).fetchone()
+
+        if draft_sql and "course_revised_schedule" not in str(draft_sql["sql"]):
+            conn.execute("""
+                CREATE TABLE outing_email_drafts_new (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    outing_id INTEGER NOT NULL,
+                    audience_type TEXT NOT NULL CHECK(audience_type IN ('member', 'course')),
+                    template_type TEXT NOT NULL CHECK(
+                        template_type IN (
+                            'invitation',
+                            'pairings',
+                            'revised_pairings',
+                            'course_hold_request',
+                            'course_final_schedule',
+                            'course_revised_schedule'
+                        )
+                    ),
+                    subject_text TEXT NOT NULL,
+                    body_text TEXT NOT NULL,
+                    body_html TEXT,
+                    status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft', 'sent')),
+                    sent_at TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    UNIQUE(outing_id, audience_type, template_type),
+                    FOREIGN KEY (outing_id) REFERENCES outings(id) ON DELETE CASCADE
+                )
+            """)
+
+            conn.execute("""
+                INSERT INTO outing_email_drafts_new (
+                    id, outing_id, audience_type, template_type,
+                    subject_text, body_text, body_html,
+                    status, sent_at, created_at, updated_at
+                )
+                SELECT
+                    id, outing_id, audience_type, template_type,
+                    subject_text, body_text, body_html,
+                    status, sent_at, created_at, updated_at
+                FROM outing_email_drafts
+            """)
+
+            conn.execute("DROP TABLE outing_email_drafts")
+            conn.execute(
+                "ALTER TABLE outing_email_drafts_new RENAME TO outing_email_drafts"
+            )

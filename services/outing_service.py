@@ -108,3 +108,6 @@ class OutingService:
 
     def get_email_delivery_summary(self, outing_id: int):
         return self.repo.get_email_delivery_summary(outing_id)
+
+    def get_recent_workflow_activity(self, outing_id: int, limit: int = 8):
+        return self.repo.get_recent_workflow_activity(outing_id, limit=limit)

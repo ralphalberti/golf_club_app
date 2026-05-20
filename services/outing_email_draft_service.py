@@ -4,6 +4,7 @@ import re
 from repositories.outing_email_draft_repository import OutingEmailDraftRepository
 from repositories.member_repository import MemberRepository
 from repositories.course_repository import CourseRepository
+from services.course_contact_service import CourseContactService
 from services.email_template_service import EmailTemplateService
 from services.email_render_service import EmailRenderService
 from services.email_service import EmailService
@@ -22,6 +23,7 @@ class OutingEmailDraftService:
         "revised_pairings",
         "course_hold_request",
         "course_final_schedule",
+        "course_revised_schedule",
     }
 
     def __init__(self, db):
@@ -30,6 +32,7 @@ class OutingEmailDraftService:
         self.render_service = EmailRenderService(db)
         self.member_repo = MemberRepository(db)
         self.course_repo = CourseRepository(db)
+        self.course_contact_service = CourseContactService(db)
         self.outing_service = OutingService(db)
         self.email_service = EmailService(db)
         self.rsvp_token_service = RSVPTokenService()
@@ -254,23 +257,71 @@ class OutingEmailDraftService:
         elif audience_type == "course":
             course_id = int(outing["course_id"])
             course = self.course_repo.get(course_id)
+
             if not course:
                 raise ValueError(f"Course not found: {course_id}")
 
-            to_email = str(course["contact_email"] or "").strip()
-            if not to_email:
-                raise ValueError("Selected course does not have a contact email.")
+            facility_id = course["facility_id"]
 
-            self.email_service.send_email(
-                outing_id=outing_id,
-                to_email=to_email,
-                subject=str(draft["subject_text"]),
-                body_text=str(draft["body_text"]),
-                body_html=draft["body_html"],
-                attachments=[],
-                recipient_type="course",
+            if not facility_id:
+                raise ValueError("Course is not assigned to a facility.")
+
+            contacts = (
+                self.course_contact_service.list_email_recipients_for_facility_template(
+                    int(facility_id),
+                    template_type,
+                )
             )
-            sent_count = 1
+
+            if not contacts:
+                raise ValueError(
+                    "No active facility contacts are configured "
+                    f"for template_type={template_type}."
+                )
+
+            for contact in contacts:
+                to_email = str(contact["email"] or "").strip()
+
+                if not to_email:
+                    continue
+
+                contact_name = f"{contact['first_name']} {contact['last_name']}".strip()
+
+                subject_text = str(draft["subject_text"])
+                body_text = str(draft["body_text"])
+                body_html = draft["body_html"]
+
+                subject_text = f"[TEST: {contact_name}] {subject_text}"
+
+                test_header = (
+                    "[TEST MODE]\n"
+                    f"Generated for facility contact: {contact_name}\n"
+                    f"Original email: {contact['email'] or ''}\n\n"
+                )
+
+                body_text = test_header + body_text
+
+                if body_html is not None:
+                    test_html_header = (
+                        "<div style='border:1px solid #ccc;padding:12px;margin-bottom:16px;'>"
+                        "<strong>TEST MODE</strong><br>"
+                        f"Generated for facility contact: {contact_name}<br>"
+                        f"Original email: {contact['email'] or ''}"
+                        "</div>"
+                    )
+                    body_html = test_html_header + body_html
+
+                self.email_service.send_email(
+                    outing_id=outing_id,
+                    to_email=to_email,
+                    subject=subject_text,
+                    body_text=body_text,
+                    body_html=body_html,
+                    attachments=[],
+                    recipient_type="course",
+                )
+
+                sent_count += 1
 
         else:
             raise ValueError(f"Unsupported audience_type: {audience_type}")
