@@ -27,6 +27,7 @@ from PyQt5.QtWidgets import (
 from services.outing_workflow_service import OutingWorkflowService
 from ui.shared.messages import show_error, show_info, show_warning
 from ui.activity_log_dialog import ActivityLogDialog
+from ui.send_communication_dialog import SendCommunicationDialog
 
 DataRole = Qt.ItemDataRole
 SelectionBehavior = QTableWidget.SelectionBehavior
@@ -53,6 +54,12 @@ MEMBER_EMAIL_TEMPLATES = [
     ("Invitation", "invitation"),
     ("Pairings", "pairings"),
     ("Revised Pairings", "revised_pairings"),
+]
+
+COURSE_EMAIL_TEMPLATES = [
+    ("Course Hold Request", "course_hold_request"),
+    ("Course Schedule", "course_final_schedule"),
+    ("Course Revised Schedule", "course_revised_schedule"),
 ]
 
 
@@ -225,11 +232,21 @@ class OutingRSVPDialog(QDialog):
             label.setStyleSheet(workflow_value_style)
 
         self.open_draft_editor_button = QPushButton("Open Draft Editor")
+        self.send_communication_button = QPushButton("Send Communication")
         self.generate_schedule_button = QPushButton("Generate Schedule")
-        self.send_recommended_template_button = QPushButton("Send Email")
+        self.send_recommended_template_button = QPushButton("Send Member Email")
+        self.send_course_email_button = QPushButton("Send Course Email")
+        self.course_email_template_combo = QComboBox()
+
+        for label, value in COURSE_EMAIL_TEMPLATES:
+            self.course_email_template_combo.addItem(label, value)
+
         self.view_activity_log_button = QPushButton("View Activity Log")
 
         self.open_draft_editor_button.clicked.connect(self.open_draft_editor)
+        self.send_communication_button.clicked.connect(
+            self.open_send_communication_dialog
+        )
         self.generate_schedule_button.clicked.connect(self.generate_schedule_from_rsvp)
         # Temporarily hide the Generate Schedule button
         self.generate_schedule_button.setVisible(False)
@@ -237,6 +254,7 @@ class OutingRSVPDialog(QDialog):
         self.send_recommended_template_button.clicked.connect(
             self.send_recommended_template
         )
+        self.send_course_email_button.clicked.connect(self.send_course_email)
         self.view_activity_log_button.clicked.connect(self.open_activity_log)
 
         main_layout = QVBoxLayout(self)
@@ -343,7 +361,11 @@ class OutingRSVPDialog(QDialog):
 
         communication_button_row = QHBoxLayout()
         communication_button_row.addWidget(self.open_draft_editor_button)
+        communication_button_row.addWidget(self.send_communication_button)
         communication_button_row.addWidget(self.send_recommended_template_button)
+        communication_button_row.addWidget(QLabel("Course Email"))
+        communication_button_row.addWidget(self.course_email_template_combo)
+        communication_button_row.addWidget(self.send_course_email_button)
         communication_button_row.addWidget(self.view_activity_log_button)
         # communication_button_row.addWidget(self.generate_schedule_button)
         communication_button_row.addStretch()
@@ -1686,6 +1708,69 @@ class OutingRSVPDialog(QDialog):
                 f"Could not send email.\n\n{exc}",
             )
 
+    def send_course_email(self):
+        template_type = str(
+            self.course_email_template_combo.currentData() or "course_hold_request"
+        )
+
+        draft = self.draft_service.get_draft(
+            self.outing_id,
+            "course",
+            template_type,
+        )
+
+        if not draft:
+            show_warning(
+                self,
+                "Draft Required",
+                f"No saved '{template_type}' course draft exists yet.\n\n"
+                "Open Draft Editor, select audience 'course', save a draft, then try again.",
+            )
+            return
+
+        confirm = QMessageBox.question(
+            self,
+            "Send Course Email",
+            f"Send the saved '{template_type}' draft to matching facility contact(s)?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+
+        if confirm != QMessageBox.Yes:
+            return
+
+        try:
+            sent_count = self.draft_service.send_draft(
+                outing_id=self.outing_id,
+                audience_type="course",
+                template_type=template_type,
+            )
+
+            if hasattr(self, "workflow_service"):
+                try:
+                    self.workflow_service.advance_after_course_email_send(
+                        outing_id=self.outing_id,
+                        template_type=template_type,
+                        sent_count=sent_count,
+                    )
+                except Exception:
+                    pass
+
+            show_info(
+                self,
+                "Course Email Sent",
+                f"SMTP accepted {sent_count} course contact email(s).",
+            )
+
+            self.load_data()
+
+        except Exception as exc:
+            show_warning(
+                self,
+                "Course Email Send Failed",
+                f"Could not send course email.\n\n{exc}",
+            )
+
     def _update_shortcut_buttons(self, snapshot: dict):
         recommended_template = str(
             snapshot.get("recommended_member_template", "")
@@ -1799,3 +1884,15 @@ class OutingRSVPDialog(QDialog):
                 "Generate Schedule Failed",
                 f"Could not generate schedule.\n\n{exc}",
             )
+
+    def open_send_communication_dialog(self):
+        dialog = SendCommunicationDialog(
+            outing_id=self.outing_id,
+            outing_service=self.outing_service,
+            contact_service=self.email_send_service.draft_service.course_contact_service,
+            draft_service=self.draft_service,
+            workflow_service=self.workflow_service,
+            parent=self,
+        )
+        dialog.exec_()
+        self.load_data()

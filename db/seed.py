@@ -111,6 +111,49 @@ def seed_email_templates(db) -> None:
                 "{{schedule_html}}"
             ),
         },
+        {
+            "course_id": None,
+            "audience_type": "course",
+            "template_type": "course_revised_schedule",
+            "subject_template": (
+                "Revised Del Webb Golf Schedule for "
+                "{{course_name}} - {{outing_date}}"
+            ),
+            "body_text_template": (
+                "Hello,\n\n"
+                "Attached below is the revised schedule for our "
+                "Del Webb golf group.\n\n"
+                "Course: {{course_name}}\n"
+                "Date: {{outing_date}}\n"
+                "First Tee Time: {{start_time}}\n\n"
+                "Please use the revised schedule below and "
+                "disregard any prior version.\n\n"
+                "{{schedule_text}}\n\n"
+                "Thank you,\n"
+                "{{sender_name}}\n"
+            ),
+            "body_html_template": (
+                "<p>Hello,</p>"
+                "<p>"
+                "Attached below is the revised schedule for our "
+                "Del Webb golf group."
+                "</p>"
+                "<p>"
+                "<strong>Course:</strong> {{course_name}}<br>"
+                "<strong>Date:</strong> {{outing_date}}<br>"
+                "<strong>First Tee Time:</strong> {{start_time}}"
+                "</p>"
+                "<p>"
+                "Please use the revised schedule below and "
+                "disregard any prior version."
+                "</p>"
+                "<pre>{{schedule_text}}</pre>"
+                "<p>"
+                "Thank you,<br>"
+                "{{sender_name}}"
+                "</p>"
+            ),
+        },
     ]
 
     with db.get_conn() as conn:

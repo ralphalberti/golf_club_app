@@ -685,3 +685,42 @@ When a member clicks an RSVP YES link after a schedule has already been generate
 - [ ] Preserve removed scheduled players as top waitlist candidates
 - [ ] Support manual player swaps between foursomes
 - [ ] Consider drag-and-drop player swap behavior
+
+---
+
+### Template Management
+
+- [ ] Allow admins to create new email templates
+- [ ] Allow admins to save reusable templates
+- [ ] Support rich text / HTML formatting in the template editor
+- [ ] Support course-specific or facility-specific templates
+- [ ] Add template type management instead of relying only on hardcoded template types
+
+---
+
+### Communication Workflow UX
+
+- [ ] Replace separate send buttons with unified Send Communication workflow
+- [ ] Add Preview / Confirmation dialog before sending
+- [ ] Allow recipient deselection prior to send
+- [ ] Show rendered final email preview
+- [ ] Show resolved recipient list before send
+- [ ] Support attachment preview
+- [ ] Add test-mode visibility in preview dialog
+- [ ] Support rich text / HTML email editing
+- [ ] Support reusable admin-defined templates
+- [ ] Support course/facility-specific templates
+
+---
+
+### Communication Composer
+
+- [ ] Combine Draft Editor, recipient selection, preview, and sending into one workflow
+- [ ] Allow choosing audience and template in one dialog
+- [ ] Generate draft from template inside composer
+- [ ] Edit subject/body directly before sending
+- [ ] Show recipient checklist with deselection support
+- [ ] Show rendered preview before send
+- [ ] Support member and facility-contact audiences
+- [ ] Preserve saved drafts for reuse/reopen
+- [ ] Eventually support rich text / HTML editing

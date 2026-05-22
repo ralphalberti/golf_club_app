@@ -40,7 +40,11 @@ class CourseContactRepository(BaseRepository):
         facility_id: int,
         template_type: str,
     ):
-        if template_type not in {"course_hold_request", "course_final_schedule"}:
+        if template_type not in {
+            "course_hold_request",
+            "course_final_schedule",
+            "course_revised_schedule",
+        }:
             raise ValueError(f"Unsupported course template_type: {template_type}")
 
         flag_column = (
