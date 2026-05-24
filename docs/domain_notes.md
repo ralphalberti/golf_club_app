@@ -16,7 +16,6 @@ When RSVP behavior changes, restart the RSVP server before testing email-link fl
 
 ---
 
-
 ## Tee Time Allocation
 
 - Each course provides a fixed number of tee times to the club
@@ -523,3 +522,105 @@ Later tee times:
 Members are the primary participants of the outing.
 
 Guests are optional dependent additions that fill remaining operational capacity.
+
+---
+
+# Golf Club App — Domain Notes Update
+
+## Version: v0.15-communication-workflow
+
+### Major Architectural Evolution
+
+The application has now evolved beyond a simple RSVP/scheduler utility into a more complete operational workflow platform with:
+
+- workflow visibility
+- communication auditing
+- facility contact management
+- audience-aware communication workflows
+- draft-based email operations
+- activity logging
+- recipient previews and confirmation flows
+
+---
+
+# Communication Workflow Architecture
+
+## New Dialogs
+
+### SendCommunicationDialog
+
+Introduced a unified communication workflow dialog.
+
+Purpose:
+
+- separate communication operations from RSVP management
+- unify member and facility-contact communications
+- provide recipient visibility before sending
+- support future communication workflow expansion
+
+Current Capabilities:
+
+- audience selection
+- template selection
+- recipient previews
+- draft previews
+- draft editing integration
+- preview/confirmation workflow
+- recipient deselection preparation
+
+---
+
+### SendConfirmationDialog
+
+Introduced preview/confirmation workflow dialog.
+
+Purpose:
+
+- final operational verification before send
+- recipient visibility
+- recipient deselection
+- rendered email preview
+
+Current Capabilities:
+
+- recipient checklist
+- subject preview
+- body preview
+- recipient confirmation
+
+Planned Evolution:
+
+- actual send execution
+- attachment preview
+- HTML rendering preview
+- test mode indicators
+- selective recipient persistence
+
+---
+
+### ActivityLogDialog
+
+Extracted recent workflow activity from the RSVP dashboard into a dedicated dialog.
+
+Purpose:
+
+- reduce dashboard clutter
+- preserve workflow audit visibility
+- improve operational readability
+
+Current Capabilities:
+
+- recent workflow activity display
+- email send audit visibility
+- workflow event visibility
+
+---
+
+# Communication UX Direction
+
+## Architectural Shift
+
+The application is transitioning from:
+
+```text
+RSVP-centric workflow

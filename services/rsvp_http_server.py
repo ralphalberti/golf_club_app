@@ -370,11 +370,6 @@ class _RSVPRequestHandler(BaseHTTPRequestHandler):
             if int(tee_time["outing_id"]) != int(outing_id):
                 raise ValueError("This tee time does not belong to the outing.")
 
-            existing_rsvps = self.rsvp_service.list_member_rsvps_for_outing(outing_id)
-            invited_member_ids = {int(row["member_id"]) for row in existing_rsvps}
-            if member_id not in invited_member_ids:
-                raise ValueError("This member was not invited for the outing.")
-
             if self.outing_service.is_member_assigned_for_outing(outing_id, member_id):
                 raise ValueError(
                     "You are already assigned to a tee time for this outing."
@@ -392,10 +387,9 @@ class _RSVPRequestHandler(BaseHTTPRequestHandler):
                 member_id=member_id,
             )
 
-            self.rsvp_service.set_member_rsvp_status(
+            self.rsvp_service.record_yes_if_first(
                 outing_id,
                 member_id,
-                "yes",
                 "Claimed open slot via email link",
             )
 

@@ -724,3 +724,227 @@ When a member clicks an RSVP YES link after a schedule has already been generate
 - [ ] Support member and facility-contact audiences
 - [ ] Preserve saved drafts for reuse/reopen
 - [ ] Eventually support rich text / HTML editing
+
+---
+
+## Communication Workflow Refactor (Planned)
+
+### Problem
+
+Current communication flow has become too dialog-heavy and operationally cumbersome.
+
+Current flow:
+
+- Send Communication dialog
+- Open/Edit Draft dialog
+- Preview/Confirm dialog
+- Return to previous dialog after send
+
+This creates:
+
+- duplicated preview/send behavior
+- confusing recipient-selection state
+- unnecessary dialog transitions
+- increased cognitive load during operational workflows
+
+---
+
+## Planned Direction: Unified Communication Composer
+
+Replace the current multi-dialog communication workflow with a single unified composer dialog.
+
+### Proposed Dialog
+
+`CommunicationComposerDialog`
+
+Responsibilities:
+
+- choose audience
+- choose workflow template
+- choose/load saved draft
+- edit subject/body inline
+- select/deselect recipients inline
+- send communication
+- optionally save reusable draft variants
+
+---
+
+## Proposed UI Layout
+
+### Header
+
+Dynamic outing context:
+
+- course name
+- outing date
+- tee format
+
+Example:
+
+Calusa 12 Hole — 6/1/2026
+
+---
+
+### Audience
+
+Dropdown:
+
+- Members
+- Facility Contacts
+
+Changing audience refreshes recipient list and available templates.
+
+---
+
+### Recipients
+
+Replace text-based recipient display with:
+
+- `QListWidget`
+- checkbox per recipient
+- select/deselect capability
+- recipient count summary
+
+Reason:
+
+- avoids parsing text
+- simplifies targeted sends
+- improves operational clarity
+
+---
+
+### Template Selection
+
+Workflow-driven fixed template types:
+
+#### Member Templates
+
+- invitation
+- pairings
+- revised_pairings
+
+#### Course Templates
+
+- course_hold_request
+- course_final_schedule
+- course_revised_schedule
+
+Templates remain system-defined and workflow-aware.
+
+---
+
+### Draft Handling
+
+Distinguish between:
+
+#### Templates
+
+Canonical workflow defaults.
+
+#### Drafts
+
+Editable operational copies.
+
+Admins may:
+
+- load template
+- revise wording
+- save named draft variant
+- reuse drafts later
+
+Potential future draft metadata:
+
+- draft_name
+- created_by
+- created_at
+- last_used_at
+
+---
+
+## Planned Workflow Simplification
+
+### Remove
+
+Eventually retire:
+
+- `EmailDraftDialog`
+- `SendConfirmationDialog`
+
+### Replace With
+
+Single operational workflow:
+
+1. Open Communication Composer
+2. Select audience/template
+3. Edit subject/body
+4. Select recipients
+5. Send
+
+---
+
+## Preview Improvements (Future)
+
+Potential future enhancements:
+
+### Live Personalized Preview
+
+Allow:
+
+Preview As:
+
+- member dropdown
+
+Dynamically render:
+
+- RSVP links
+- cancellation links
+- personalized schedules
+
+This would reduce uncertainty before send.
+
+---
+
+## Async Sending Improvements
+
+Future improvements:
+
+- progress dialog during sends
+- background send worker/thread
+- cancellation support
+- retry UI for failed recipients
+- detailed send summary
+
+---
+
+## Communication Audit Enhancements
+
+Future work:
+
+Track:
+
+- sender
+- send timestamp
+- audience
+- template type
+- recipient count
+- skipped recipients
+- failed recipients
+- workflow stage advancement
+
+Potential future table:
+
+`communication_send_log`
+
+---
+
+## Current Priority Before Refactor
+
+Before implementing unified composer:
+
+- stabilize current send workflow
+- verify recipient accounting
+- verify workflow advancement
+- verify draft sent timestamps
+- verify personalized RSVP/cancel links
+- verify course-contact sends
+- verify test-tagging behavior

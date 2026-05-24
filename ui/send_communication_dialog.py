@@ -6,14 +6,18 @@ from PyQt5.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QListWidget,
+    QMessageBox,
     QPushButton,
     QTextEdit,
     QVBoxLayout,
+    QApplication,
+    QProgressDialog,
 )
 from repositories.member_repository import MemberRepository
 from repositories.course_repository import CourseRepository
 from ui.email_draft_dialog import EmailDraftDialog
 from ui.send_confirmation_dialog import SendConfirmationDialog
+from services.outing_email_send_service import OutingEmailSendService
 
 MEMBER_TEMPLATE_OPTIONS = [
     ("Invitation", "invitation"),
@@ -142,6 +146,7 @@ class SendCommunicationDialog(QDialog):
         self.close_button.clicked.connect(self.reject)
         self.preview_button.clicked.connect(self.open_preview_dialog)
         self.open_draft_button.clicked.connect(self.open_draft_editor)
+        self.send_button.clicked.connect(self.send_communication)
 
         self._reload_template_options()
 
@@ -276,31 +281,71 @@ class SendCommunicationDialog(QDialog):
         self.draft_preview.setPlainText(preview_text)
 
     def _current_recipient_dicts(self) -> list[dict]:
-        recipients = []
+        audience_type = self.current_audience_type()
+        template_type = self.current_template_type()
 
-        for index in range(self.recipient_list.count()):
-            item = self.recipient_list.item(index)
-            text = item.text().strip()
+        recipients: list[dict] = []
 
-            if not text:
-                continue
+        if audience_type == "member":
+            members = self.member_repo.list_all(active_only=True)
 
-            if text.startswith("Active Members:") or text.startswith(
-                "Facility Contacts:"
-            ):
-                continue
+            for member in members:
+                name = (f"{member['first_name']} " f"{member['last_name']}").strip()
 
-            if text in {
-                "No matching facility contacts.",
-                "Course has no assigned facility.",
-                "Course not found.",
-                "Outing not found.",
-            }:
-                continue
+                email = str(member["email"] or "").strip()
+
+                recipients.append(
+                    {
+                        "member_id": int(member["id"]),
+                        "email": email,
+                        "label": f"{name} <{email}>",
+                    }
+                )
+
+            return recipients
+
+        #
+        # Facility contacts
+        #
+        outing = self.outing_service.get_outing(self.outing_id)
+
+        if not outing:
+            return []
+
+        course_id = int(outing["course_id"])
+        course = self.course_repo.get(course_id)
+
+        if not course:
+            return []
+
+        facility_id = course["facility_id"]
+
+        if not facility_id:
+            return []
+
+        contacts = self.contact_service.list_email_recipients_for_facility_template(
+            int(facility_id),
+            template_type,
+        )
+
+        for contact in contacts:
+            name = (f"{contact['first_name']} " f"{contact['last_name']}").strip()
+
+            title = str(contact["title"] or "").strip()
+            email = str(contact["email"] or "").strip()
+
+            label = name
+
+            if title:
+                label += f" ({title})"
+
+            label += f" <{email}>"
 
             recipients.append(
                 {
-                    "label": text,
+                    "contact_id": int(contact["id"]),
+                    "email": email,
+                    "label": label,
                 }
             )
 
@@ -312,6 +357,9 @@ class SendCommunicationDialog(QDialog):
 
         for recipient in selected:
             self.recipient_list.addItem(recipient.get("label", ""))
+
+    def _sent_count_from_result(self, result: dict) -> int:
+        return int(result.get("sent_count", result.get("sent", 0)) or 0)
 
     def open_draft_editor(self):
         outing = self.outing_service.get_outing(self.outing_id)
@@ -363,9 +411,128 @@ class SendCommunicationDialog(QDialog):
             parent=self,
         )
 
-        if dialog.exec_():
-            selected = dialog.selected_recipients()
-            self._replace_recipient_list_with_selected(selected)
-            self.draft_status_label.setText(
-                f"Preview confirmed. Selected recipients: {len(selected)}"
+        # if dialog.exec_():
+        #     selected = dialog.selected_recipients()
+        #     self._replace_recipient_list_with_selected(selected)
+        #     self.draft_status_label.setText(
+        #         f"Preview confirmed. Selected recipients: {len(selected)}"
+        #     )
+        dialog.exec_()
+
+    def send_communication(self):
+        audience_type = self.current_audience_type()
+        template_type = self.current_template_type()
+
+        draft = self.draft_service.get_draft(
+            self.outing_id,
+            audience_type,
+            template_type,
+        )
+
+        if not draft:
+            QMessageBox.warning(
+                self,
+                "No Draft",
+                "Please create and save a draft before sending.",
+            )
+            return
+
+        recipients = self._current_recipient_dicts()
+
+        if not recipients:
+            QMessageBox.warning(
+                self,
+                "No Recipients",
+                "There are no recipients available for this communication.",
+            )
+            return
+
+        dialog = SendConfirmationDialog(
+            audience_label=self.audience_combo.currentText(),
+            template_label=self.template_combo.currentText(),
+            recipients=recipients,
+            subject=str(draft["subject_text"]),
+            body_text=str(draft["body_text"]),
+            parent=self,
+        )
+
+        if not dialog.exec_():
+            return
+
+        selected = dialog.selected_recipients()
+
+        if not selected:
+            QMessageBox.information(
+                self,
+                "No Recipients Selected",
+                "No recipients were selected.",
+            )
+            return
+
+        progress = QProgressDialog(
+            "Sending communication...",
+            None,
+            0,
+            0,
+            self,
+        )
+        progress.setWindowTitle("Sending")
+        progress.setWindowModality(Qt.ApplicationModal)
+        progress.setCancelButton(None)
+        progress.show()
+
+        QApplication.setOverrideCursor(Qt.WaitCursor)
+        QApplication.processEvents()
+
+        try:
+            send_service = OutingEmailSendService(self.draft_service)
+
+            if audience_type == "member":
+                member_ids = [int(r["member_id"]) for r in selected if "member_id" in r]
+
+                result = send_service.send_draft_to_member_ids(
+                    outing_id=self.outing_id,
+                    template_type=template_type,
+                    member_ids=member_ids,
+                )
+
+            else:
+                to_emails = [
+                    str(r["email"]).strip() for r in selected if r.get("email")
+                ]
+
+                result = send_service.send_test_email(
+                    outing_id=self.outing_id,
+                    audience_type="course",
+                    template_type=template_type,
+                    to_emails=to_emails,
+                )
+
+            sent_count = self._sent_count_from_result(result)
+            skipped_count = len(result.get("skipped", []))
+            failed_count = len(result.get("failed", []))
+
+            progress.close()
+            QApplication.restoreOverrideCursor()
+
+            QMessageBox.information(
+                self,
+                "Send Complete",
+                (
+                    f"Sent: {sent_count}\n"
+                    f"Skipped: {skipped_count}\n"
+                    f"Failed: {failed_count}"
+                ),
+            )
+
+            self.accept()
+
+        except Exception as exc:
+            progress.close()
+            QApplication.restoreOverrideCursor()
+
+            QMessageBox.critical(
+                self,
+                "Send Failed",
+                str(exc),
             )
